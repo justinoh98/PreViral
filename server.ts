@@ -14,6 +14,7 @@ const evaluationCache = new Map<string, any>();
 
 function createVideoSignature(data: {
   title?: string;
+  videoContentHash?: string;
   durationSeconds?: number;
   fileFormat?: string;
   fileSizeMb?: number;
@@ -26,15 +27,7 @@ function createVideoSignature(data: {
   frameSnapshots?: string[];
   language?: string;
 }): string {
-  const normTitle = (data.title || '').trim().toLowerCase();
-  const normCaption = (data.captionInput || '').trim().toLowerCase();
-  const normConcept = (data.videoConcept || '').trim().toLowerCase();
-  const normAudio = (data.audioType || '').trim().toLowerCase();
-  const normNiche = (data.niche || '').trim().toLowerCase();
-  const normFormat = (data.fileFormat || '').trim().toLowerCase();
-  const lang = (data.language || 'en').trim().toLowerCase();
-  const duration = Number(data.durationSeconds) || 0;
-  const fileSize = Number(data.fileSizeMb) || 0;
+  const contentHash = (data.videoContentHash || '').trim();
 
   // Build snapshot fingerprint from snapshot lengths and ending characters
   let snapshotFingerprint = '';
@@ -45,18 +38,14 @@ function createVideoSignature(data: {
   }
 
   const rawKey = [
-    normTitle,
-    duration,
-    normFormat,
-    fileSize,
-    normNiche,
-    normCaption,
-    normConcept,
-    normAudio,
+    contentHash || snapshotFingerprint || `${Number(data.fileSizeMb) || 0}:${Number(data.durationSeconds) || 0}`,
+    data.niche || '',
+    data.captionInput || '',
+    data.videoConcept || '',
+    data.audioType || '',
     Boolean(data.hasWatermark),
     Boolean(data.detectedAudioSilence),
-    snapshotFingerprint,
-    lang,
+    data.language || 'en',
   ].join('::');
 
   return crypto.createHash('md5').update(rawKey).digest('hex');
@@ -223,6 +212,7 @@ async function startServer() {
         captionInput,
         videoConcept,
         audioType,
+        videoContentHash,
         frameSnapshots,
         hasWatermark,
         detectedAudioSilence,
@@ -231,7 +221,7 @@ async function startServer() {
 
       // Requirement A: Exact same video static ratings check
       const videoSignature = createVideoSignature({
-        title,
+        videoContentHash,
         durationSeconds,
         fileFormat,
         fileSizeMb,
@@ -250,6 +240,7 @@ async function startServer() {
         const cachedEvaluation = evaluationCache.get(videoSignature);
         return res.json({
           ...cachedEvaluation,
+          title: title || cachedEvaluation.title,
           isCachedEvaluation: true,
         });
       }
@@ -293,7 +284,12 @@ async function startServer() {
       const promptText = `You are a strictly objective, uncompromising Instagram Reels & Short-Form Video Algorithm Auditor in 2026.
 You are evaluating a Reel prior to publishing. Your evaluation MUST be strictly objective, critical, and evidence-based. 
 CRITICAL EVALUATION MANDATE:
-- Do NOT give polite or artificially inflated ratings. Be tough and unforgiving.
+- Use only measurable visual evidence, supplied context, and the rubric below. Do not infer facts that are not visible or provided.
+- Separate observations from predictions. Never present an algorithm forecast as a verified outcome.
+- Do NOT give polite, promotional, or artificially inflated ratings. Apply identical evidence thresholds to every creator and niche.
+- Every deduction and every positive score must be traceable to a specific observed frame, timestamp, measurable property, or supplied context.
+- If evidence is unavailable, state that it was not verifiable and score conservatively; never fabricate cuts, silence, captions, resolution, safe-zone placement, narrative beats, or loop quality.
+- Treat the title and filename as display identifiers only. They must never raise, lower, or otherwise influence any rating.
 - Act as an algorithm auditor that penalizes flaws heavily (e.g. dead air >0.3s, lack of instant visual motion at second 0, missing captions, low contrast, absent CTA, long setup delay).
 - Highlight specific defects and weaknesses explicitly in \`criticalDefectsIdentified\`.
 ${languageInstruction}

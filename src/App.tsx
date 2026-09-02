@@ -83,6 +83,7 @@ function AppContent() {
             {/* Always-open Video Submission Function */}
             <VideoUploader
               onEvaluationComplete={handleEvaluationComplete}
+              onVideoIdentityChange={() => setCurrentEvaluation(null)}
               isEvaluating={isEvaluating}
               setIsEvaluating={setIsEvaluating}
               creatorHandle={creatorHandle}

@@ -8,6 +8,7 @@ import { createLocalEvaluation } from '../localFallback';
 
 interface VideoUploaderProps {
   onEvaluationComplete: (evaluation: ReelEvaluation) => void;
+  onVideoIdentityChange: () => void;
   isEvaluating: boolean;
   setIsEvaluating: (loading: boolean) => void;
   creatorHandle: string;
@@ -16,6 +17,7 @@ interface VideoUploaderProps {
 
 export const VideoUploader: React.FC<VideoUploaderProps> = ({
   onEvaluationComplete,
+  onVideoIdentityChange,
   isEvaluating,
   setIsEvaluating,
   creatorHandle,
@@ -25,6 +27,8 @@ export const VideoUploader: React.FC<VideoUploaderProps> = ({
   const presetReels = getPresetReels(language);
   const [videoFile, setVideoFile] = useState<File | null>(null);
   const [videoUrl, setVideoUrl] = useState<string | null>(null);
+  const [videoContentHash, setVideoContentHash] = useState<string>('');
+  const [isFingerprinting, setIsFingerprinting] = useState<boolean>(false);
   const [videoTitle, setVideoTitle] = useState<string>('');
   const [duration, setDuration] = useState<number>(15);
   const [fileFormat, setFileFormat] = useState<string>('MP4');
@@ -58,6 +62,58 @@ export const VideoUploader: React.FC<VideoUploaderProps> = ({
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const fileSelectionRef = useRef<number>(0);
+
+  const checksumTable = useRef<Uint32Array | null>(null);
+
+  const getChecksumTable = () => {
+    if (checksumTable.current) return checksumTable.current;
+    const table = new Uint32Array(256);
+    for (let n = 0; n < 256; n += 1) {
+      let value = n;
+      for (let bit = 0; bit < 8; bit += 1) {
+        value = (value & 1) ? (0xedb88320 ^ (value >>> 1)) : (value >>> 1);
+      }
+      table[n] = value >>> 0;
+    }
+    checksumTable.current = table;
+    return table;
+  };
+
+  // Reads every byte without loading the whole video into memory. File names and
+  // timestamps are deliberately excluded, so renaming an unchanged video keeps
+  // its original evaluation while any byte-level edit creates a new identity.
+  const createContentFingerprint = async (file: File) => {
+    const table = getChecksumTable();
+    const reader = file.stream().getReader();
+    let crc = 0xffffffff;
+    let fnv = 0x811c9dc5;
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      for (let index = 0; index < value.length; index += 1) {
+        const byte = value[index];
+        crc = (crc >>> 8) ^ table[(crc ^ byte) & 0xff];
+        fnv = Math.imul(fnv ^ byte, 0x01000193) >>> 0;
+      }
+    }
+
+    return `${file.size}-${((crc ^ 0xffffffff) >>> 0).toString(16).padStart(8, '0')}-${fnv.toString(16).padStart(8, '0')}`;
+  };
+
+  const createEvaluationCacheKey = async (contentHash: string) => {
+    const context = JSON.stringify({
+      contentHash,
+      niche,
+      captionInput,
+      videoConcept,
+      audioType,
+      language,
+    });
+    const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(context));
+    return `previral:evaluation:${Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, '0')).join('')}`;
+  };
 
   // Device media is requested only after an explicit user action. The browser's
   // native picker grants access only to the file the user selects.
@@ -86,7 +142,7 @@ export const VideoUploader: React.FC<VideoUploaderProps> = ({
 
   const MAX_FILE_SIZE_BYTES = 2.5 * 1024 * 1024 * 1024; // 2.5GB
 
-  const processSelectedFile = (file: File) => {
+  const processSelectedFile = async (file: File) => {
     if (file.size > MAX_FILE_SIZE_BYTES) {
       alert(
         language === 'ko'
@@ -95,20 +151,38 @@ export const VideoUploader: React.FC<VideoUploaderProps> = ({
       );
       return;
     }
+    const selectionId = ++fileSelectionRef.current;
+    onVideoIdentityChange();
     setSelectedPreset(null);
+    setVideoTitle('');
+    setVideoContentHash('');
+    setIsFingerprinting(true);
     setVideoFile(file);
+    if (videoUrl?.startsWith('blob:')) URL.revokeObjectURL(videoUrl);
     const url = URL.createObjectURL(file);
     setVideoUrl(url);
     setVideoTitle(file.name.replace(/\.[^/.]+$/, ''));
     setFileSizeMb(Number((file.size / (1024 * 1024)).toFixed(1)));
     const ext = file.name.split('.').pop()?.toUpperCase() || 'MP4';
     setFileFormat(ext);
+    try {
+      const fingerprint = await createContentFingerprint(file);
+      if (fileSelectionRef.current === selectionId) setVideoContentHash(fingerprint);
+    } catch (error) {
+      console.warn('Could not fingerprint the selected video:', error);
+      if (fileSelectionRef.current === selectionId) {
+        setVideoContentHash(`${file.size}-${file.lastModified}`);
+      }
+    } finally {
+      if (fileSelectionRef.current === selectionId) setIsFingerprinting(false);
+    }
   };
 
   // Handle Preset Reel Selection
   const handleSelectPreset = (preset: PresetReel) => {
     setSelectedPreset(preset);
     setVideoFile(null);
+    setVideoContentHash(`preset:${preset.id}`);
     setVideoUrl(preset.videoUrl);
     setVideoTitle(preset.title);
     setDuration(preset.duration);
@@ -226,8 +300,21 @@ export const VideoUploader: React.FC<VideoUploaderProps> = ({
         captionInput,
         videoConcept,
         audioType,
+        videoContentHash: videoContentHash || `preset:${selectedPreset?.id || 'unknown'}`,
         language,
       };
+
+      const cacheKey = await createEvaluationCacheKey(auditInput.videoContentHash);
+      const cachedValue = localStorage.getItem(cacheKey);
+      if (cachedValue) {
+        const cachedEvaluation = JSON.parse(cachedValue) as ReelEvaluation;
+        onEvaluationComplete({
+          ...cachedEvaluation,
+          title: auditInput.title,
+          isCachedEvaluation: true,
+        });
+        return;
+      }
       const response = await fetch('/api/evaluate-reel', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -243,6 +330,7 @@ export const VideoUploader: React.FC<VideoUploaderProps> = ({
       const evaluationData: ReelEvaluation = response.ok
         ? await response.json()
         : createLocalEvaluation(auditInput);
+      localStorage.setItem(cacheKey, JSON.stringify(evaluationData));
       onEvaluationComplete(evaluationData);
     } catch (err) {
       const evaluationData = createLocalEvaluation({
@@ -254,8 +342,13 @@ export const VideoUploader: React.FC<VideoUploaderProps> = ({
         captionInput,
         videoConcept,
         audioType,
+        videoContentHash,
         language,
       });
+      if (videoContentHash) {
+        const cacheKey = await createEvaluationCacheKey(videoContentHash);
+        localStorage.setItem(cacheKey, JSON.stringify(evaluationData));
+      }
       onEvaluationComplete(evaluationData);
     } finally {
       setIsEvaluating(false);
@@ -391,6 +484,9 @@ export const VideoUploader: React.FC<VideoUploaderProps> = ({
                   onClick={() => {
                     setVideoUrl(null);
                     setVideoFile(null);
+                    setVideoContentHash('');
+                    setVideoTitle('');
+                    onVideoIdentityChange();
                     setSelectedPreset(null);
                     setVideoConcept('');
                   }}
@@ -534,10 +630,12 @@ export const VideoUploader: React.FC<VideoUploaderProps> = ({
           <div className="pt-2">
             <button
               onClick={handleEvaluate}
-              disabled={isEvaluating || (!videoUrl && !selectedPreset)}
+              disabled={isEvaluating || isFingerprinting || (!videoUrl && !selectedPreset) || (!selectedPreset && !videoContentHash)}
               className="w-full bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white font-semibold text-sm py-3.5 px-6 rounded-xl shadow-lg shadow-indigo-100 transition-all flex items-center justify-center gap-2 hover:scale-[1.01] active:scale-[0.99]"
             >
-              {isEvaluating ? (
+              {isFingerprinting ? (
+                <><RotateCcw className="w-4 h-4 animate-spin" /> {language === 'ko' ? '영상 변경 여부 확인 중...' : 'Checking video identity...'}</>
+              ) : isEvaluating ? (
                 <>
                   <Sparkles className="w-5 h-5 animate-spin" />
                   <span>{evalProgressText}</span>
