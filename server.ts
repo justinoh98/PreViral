@@ -1,7 +1,11 @@
 import express from 'express';
 import path from 'path';
 import crypto from 'crypto';
+import dotenv from 'dotenv';
 import { createServer as createViteServer } from 'vite';
+
+dotenv.config({ path: '.env.local' });
+dotenv.config();
 
 const OPENAI_MODEL = process.env.OPENAI_MODEL || 'gpt-5.6-terra';
 
