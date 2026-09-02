@@ -4,7 +4,7 @@
 
 # PreViral
 
-PreViral is an AI-powered pre-publishing quality and growth audit platform for Instagram Reels, TikTok, and YouTube Shorts.
+PreViral is an AI-powered pre-publishing quality and growth audit platform for Instagram Reels, TikTok, and YouTube Shorts. It is a responsive web app: creators can use it from phones, tablets, and desktops in a modern browser.
 
 ## Run Locally
 
@@ -25,3 +25,5 @@ PreViral is a Node/Express service, so deploy it to a host that supports long-ru
 - Start: `npm start`
 
 Set `OPENAI_API_KEY` as a server-side environment variable in the host dashboard. Optionally set `OPENAI_MODEL`; it defaults to `gpt-5.6-terra`. Never put either value in browser code or a committed `.env` file.
+
+The service respects the host-provided `PORT` automatically and exposes `GET /api/health` for deployment health checks. A portable [Dockerfile](./Dockerfile) is included for any container host. A permanent public URL still requires deployment to an account you control; local tunnels are temporary and stop when the local process stops.

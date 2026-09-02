@@ -162,7 +162,8 @@ function generateStanceByStanceGuidance(
 
 async function startServer() {
   const app = express();
-  const PORT = 3000;
+  // Hosted platforms provide their own port through PORT; use 3000 only locally.
+  const PORT = Number(process.env.PORT) || 3000;
 
   // Middleware for large JSON payloads (for base64 frame snapshots)
   app.use(express.json({ limit: '100mb' }));
@@ -288,7 +289,7 @@ async function startServer() {
 - The targetHashtags MUST be exactly 5 relevant, high-reach English hashtags with '#' (e.g. #reelsgrowth, #contentcreator, #viralreels, #instagramtips, #creatortips or specific to the niche).
 - Write as an experienced viral video growth director. Every sentence must sound natural and human.`;
 
-      // Prepare Prompt for Gemini
+      // Prepare the OpenAI evaluation prompt.
       const promptText = `You are a strictly objective, uncompromising Instagram Reels & Short-Form Video Algorithm Auditor in 2026.
 You are evaluating a Reel prior to publishing. Your evaluation MUST be strictly objective, critical, and evidence-based. 
 CRITICAL EVALUATION MANDATE:
@@ -385,7 +386,7 @@ Return a STRICT JSON response adhering to this JSON Schema.`;
 
       return res.json(result);
     } catch (err: any) {
-      console.error('Error evaluating reel with Gemini:', err);
+      console.error('Error evaluating reel with OpenAI:', err);
       // Return realistic fallback on error
       const mockResult = generateFallbackEvaluation({
         title: req.body.title || 'Uploaded Reel',

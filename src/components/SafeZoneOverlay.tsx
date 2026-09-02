@@ -26,12 +26,13 @@ export const SafeZoneOverlay: React.FC<SafeZoneOverlayProps> = ({
     : 'Original Audio • Trending Sound';
 
   return (
-    <div className="relative">
-      {/* Toggle Button */}
+    <>
+      {/* This is positioned against the video card, not a separate small wrapper. */}
       <button
         type="button"
         onClick={onToggle}
-        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all shadow-sm ${
+        aria-pressed={isVisible}
+        className={`absolute top-3 right-3 z-30 flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all shadow-sm ${
           isVisible
             ? 'bg-rose-600 text-white ring-2 ring-rose-400'
             : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
@@ -107,6 +108,6 @@ export const SafeZoneOverlay: React.FC<SafeZoneOverlayProps> = ({
           </div>
         </div>
       )}
-    </div>
+    </>
   );
 };
