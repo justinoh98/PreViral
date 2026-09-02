@@ -15,6 +15,14 @@ interface VideoUploaderProps {
   defaultNiche: string;
 }
 
+const EVALUATION_CACHE_VERSION = 5;
+
+interface StoredEvaluation {
+  scoringVersion: number;
+  videoContentHash: string;
+  evaluation: ReelEvaluation;
+}
+
 export const VideoUploader: React.FC<VideoUploaderProps> = ({
   onEvaluationComplete,
   onVideoIdentityChange,
@@ -104,11 +112,41 @@ export const VideoUploader: React.FC<VideoUploaderProps> = ({
 
   const createEvaluationCacheKey = async (contentHash: string) => {
     const context = JSON.stringify({
-      scoringVersion: 4,
+      scoringVersion: EVALUATION_CACHE_VERSION,
       contentHash,
     });
     const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(context));
-    return `previral:evaluation:v4:${Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, '0')).join('')}`;
+    return `previral:evaluation:v${EVALUATION_CACHE_VERSION}:${Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, '0')).join('')}`;
+  };
+
+  const readExactMatchEvaluation = (cacheKey: string, contentHash: string) => {
+    const cachedValue = localStorage.getItem(cacheKey);
+    if (!cachedValue) return null;
+
+    try {
+      const stored = JSON.parse(cachedValue) as StoredEvaluation;
+      if (
+        stored.scoringVersion !== EVALUATION_CACHE_VERSION ||
+        stored.videoContentHash !== contentHash ||
+        !stored.evaluation
+      ) {
+        localStorage.removeItem(cacheKey);
+        return null;
+      }
+      return stored.evaluation;
+    } catch {
+      localStorage.removeItem(cacheKey);
+      return null;
+    }
+  };
+
+  const storeEvaluation = (cacheKey: string, contentHash: string, evaluation: ReelEvaluation) => {
+    const stored: StoredEvaluation = {
+      scoringVersion: EVALUATION_CACHE_VERSION,
+      videoContentHash: contentHash,
+      evaluation: { ...evaluation, isCachedEvaluation: false },
+    };
+    localStorage.setItem(cacheKey, JSON.stringify(stored));
   };
 
   // Device media is requested only after an explicit user action. The browser's
@@ -372,9 +410,8 @@ export const VideoUploader: React.FC<VideoUploaderProps> = ({
       };
 
       const cacheKey = await createEvaluationCacheKey(auditInput.videoContentHash);
-      const cachedValue = localStorage.getItem(cacheKey);
-      if (cachedValue) {
-        const cachedEvaluation = JSON.parse(cachedValue) as ReelEvaluation;
+      const cachedEvaluation = readExactMatchEvaluation(cacheKey, auditInput.videoContentHash);
+      if (cachedEvaluation) {
         onEvaluationComplete({
           ...cachedEvaluation,
           title: auditInput.title,
@@ -397,8 +434,9 @@ export const VideoUploader: React.FC<VideoUploaderProps> = ({
       const evaluationData: ReelEvaluation = response.ok
         ? await response.json()
         : createLocalEvaluation(auditInput);
-      localStorage.setItem(cacheKey, JSON.stringify(evaluationData));
-      onEvaluationComplete(evaluationData);
+      const freshEvaluation = { ...evaluationData, isCachedEvaluation: false };
+      storeEvaluation(cacheKey, auditInput.videoContentHash, freshEvaluation);
+      onEvaluationComplete(freshEvaluation);
     } catch (err) {
       const evaluationData = createLocalEvaluation({
         title: videoTitle || (language === 'ko' ? '업로드된 릴스' : 'Uploaded Reel'),
@@ -415,9 +453,9 @@ export const VideoUploader: React.FC<VideoUploaderProps> = ({
       });
       if (videoContentHash) {
         const cacheKey = await createEvaluationCacheKey(videoContentHash);
-        localStorage.setItem(cacheKey, JSON.stringify(evaluationData));
+        storeEvaluation(cacheKey, videoContentHash, evaluationData);
       }
-      onEvaluationComplete(evaluationData);
+      onEvaluationComplete({ ...evaluationData, isCachedEvaluation: false });
     } finally {
       setIsEvaluating(false);
     }
