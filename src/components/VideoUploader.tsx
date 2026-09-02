@@ -4,7 +4,7 @@ import { getPresetReels } from '../data/presets';
 import { PresetReel, ReelEvaluation } from '../types';
 import { SafeZoneOverlay } from './SafeZoneOverlay';
 import { useLanguage } from '../i18n';
-import { createLocalEvaluation } from '../localFallback';
+import { createLocalEvaluation, VideoMetrics } from '../localFallback';
 
 interface VideoUploaderProps {
   onEvaluationComplete: (evaluation: ReelEvaluation) => void;
@@ -104,6 +104,7 @@ export const VideoUploader: React.FC<VideoUploaderProps> = ({
 
   const createEvaluationCacheKey = async (contentHash: string) => {
     const context = JSON.stringify({
+      scoringVersion: 2,
       contentHash,
       niche,
       captionInput,
@@ -112,7 +113,7 @@ export const VideoUploader: React.FC<VideoUploaderProps> = ({
       language,
     });
     const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(context));
-    return `previral:evaluation:${Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, '0')).join('')}`;
+    return `previral:evaluation:v2:${Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, '0')).join('')}`;
   };
 
   // Device media is requested only after an explicit user action. The browser's
@@ -213,28 +214,87 @@ export const VideoUploader: React.FC<VideoUploaderProps> = ({
     }
   };
 
-  // Extract base64 frame snapshots from video element for Gemini AI visual analysis
-  const captureFrameSnapshots = (): string[] => {
+  // Sample the actual footage for content-specific, measurable browser analysis.
+  const analyzeVideoFrames = async (): Promise<{ frameSnapshots: string[]; videoMetrics?: VideoMetrics }> => {
     const snapshots: string[] = [];
     try {
-      if (!videoRef.current || !canvasRef.current) return snapshots;
+      if (!videoRef.current || !canvasRef.current) return { frameSnapshots: snapshots };
 
       const video = videoRef.current;
       const canvas = canvasRef.current;
-      if (!canvas || typeof canvas.getContext !== 'function') return snapshots;
-
-      canvas.width = video.videoWidth || 640;
-      canvas.height = video.videoHeight || 360;
-      const ctx = canvas.getContext('2d');
-
-      if (ctx) {
-        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-        snapshots.push(canvas.toDataURL('image/jpeg', 0.8));
+      if (!canvas || typeof canvas.getContext !== 'function') return { frameSnapshots: snapshots };
+      if (video.readyState < 1) {
+        await new Promise<void>((resolve) => video.addEventListener('loadedmetadata', () => resolve(), { once: true }));
       }
+
+      const sourceWidth = video.videoWidth || 640;
+      const sourceHeight = video.videoHeight || 360;
+      canvas.width = 96;
+      canvas.height = Math.max(54, Math.round(96 * sourceHeight / sourceWidth));
+      const ctx = canvas.getContext('2d');
+      if (!ctx) return { frameSnapshots: snapshots };
+
+      const wasPaused = video.paused;
+      const originalTime = video.currentTime;
+      video.pause();
+      const durationValue = Math.max(0.1, video.duration || duration || 1);
+      const sampleRatios = [0.02, 0.12, 0.35, 0.65, 0.92];
+      const luminanceFrames: Uint8Array[] = [];
+      const contrastValues: number[] = [];
+      const brightnessValues: number[] = [];
+
+      for (const ratio of sampleRatios) {
+        const target = Math.min(Math.max(0, durationValue * ratio), Math.max(0, durationValue - 0.05));
+        if (Math.abs(video.currentTime - target) > 0.02) {
+          await new Promise<void>((resolve) => {
+            const finish = () => resolve();
+            video.addEventListener('seeked', finish, { once: true });
+            video.currentTime = target;
+            window.setTimeout(finish, 1500);
+          });
+        }
+        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+        const pixels = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
+        const luminance = new Uint8Array(canvas.width * canvas.height);
+        let sum = 0;
+        for (let pixel = 0, point = 0; pixel < pixels.length; pixel += 4, point += 1) {
+          const value = Math.round(pixels[pixel] * 0.2126 + pixels[pixel + 1] * 0.7152 + pixels[pixel + 2] * 0.0722);
+          luminance[point] = value;
+          sum += value;
+        }
+        const mean = sum / luminance.length;
+        let variance = 0;
+        for (const value of luminance) variance += (value - mean) ** 2;
+        luminanceFrames.push(luminance);
+        brightnessValues.push(mean / 255 * 100);
+        contrastValues.push(Math.min(100, Math.sqrt(variance / luminance.length) / 64 * 100));
+        if (snapshots.length < 3) snapshots.push(canvas.toDataURL('image/jpeg', 0.78));
+      }
+
+      const frameDifference = (left: Uint8Array, right: Uint8Array) => {
+        let difference = 0;
+        for (let index = 0; index < left.length; index += 1) difference += Math.abs(left[index] - right[index]);
+        return difference / left.length / 255 * 100;
+      };
+      const consecutiveDifferences = luminanceFrames.slice(1).map((frame, index) => frameDifference(luminanceFrames[index], frame));
+      const startEndDifference = frameDifference(luminanceFrames[0], luminanceFrames[luminanceFrames.length - 1]);
+      const videoMetrics: VideoMetrics = {
+        width: sourceWidth,
+        height: sourceHeight,
+        motionScore: Math.round(Math.min(100, (consecutiveDifferences.reduce((sum, value) => sum + value, 0) / consecutiveDifferences.length) * 4)),
+        contrastScore: Math.round(contrastValues.reduce((sum, value) => sum + value, 0) / contrastValues.length),
+        brightnessScore: Math.round(brightnessValues.reduce((sum, value) => sum + value, 0) / brightnessValues.length),
+        loopSimilarityScore: Math.round(Math.max(0, 100 - startEndDifference * 4)),
+        sampledFrames: luminanceFrames.length,
+      };
+
+      video.currentTime = originalTime;
+      if (!wasPaused) void video.play();
+      return { frameSnapshots: snapshots, videoMetrics };
     } catch (err) {
       console.warn('Could not capture video frame snapshot:', err);
     }
-    return snapshots;
+    return { frameSnapshots: snapshots };
   };
 
   // Trigger Reel Evaluation
@@ -260,8 +320,10 @@ export const VideoUploader: React.FC<VideoUploaderProps> = ({
         : 'Scanning 0-3s Zero-Second Hook & visual contrast...'
     );
 
+    let analyzedMetrics: VideoMetrics | undefined;
     try {
-      const frameSnapshots = captureFrameSnapshots();
+      const { frameSnapshots, videoMetrics } = await analyzeVideoFrames();
+      analyzedMetrics = videoMetrics;
 
       setTimeout(
         () =>
@@ -301,6 +363,7 @@ export const VideoUploader: React.FC<VideoUploaderProps> = ({
         videoConcept,
         audioType,
         videoContentHash: videoContentHash || `preset:${selectedPreset?.id || 'unknown'}`,
+        videoMetrics,
         language,
       };
 
@@ -343,6 +406,7 @@ export const VideoUploader: React.FC<VideoUploaderProps> = ({
         videoConcept,
         audioType,
         videoContentHash,
+        videoMetrics: analyzedMetrics,
         language,
       });
       if (videoContentHash) {
