@@ -104,16 +104,11 @@ export const VideoUploader: React.FC<VideoUploaderProps> = ({
 
   const createEvaluationCacheKey = async (contentHash: string) => {
     const context = JSON.stringify({
-      scoringVersion: 2,
+      scoringVersion: 3,
       contentHash,
-      niche,
-      captionInput,
-      videoConcept,
-      audioType,
-      language,
     });
     const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(context));
-    return `previral:evaluation:v2:${Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, '0')).join('')}`;
+    return `previral:evaluation:v3:${Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, '0')).join('')}`;
   };
 
   // Device media is requested only after an explicit user action. The browser's
@@ -238,12 +233,13 @@ export const VideoUploader: React.FC<VideoUploaderProps> = ({
       const originalTime = video.currentTime;
       video.pause();
       const durationValue = Math.max(0.1, video.duration || duration || 1);
-      const sampleRatios = [0.02, 0.12, 0.35, 0.65, 0.92];
+      const sampleCount = Math.min(16, Math.max(6, Math.ceil(durationValue / 2) + 1));
+      const sampleRatios = Array.from({ length: sampleCount }, (_, index) => 0.02 + (0.9 * index) / (sampleCount - 1));
       const luminanceFrames: Uint8Array[] = [];
       const contrastValues: number[] = [];
       const brightnessValues: number[] = [];
 
-      for (const ratio of sampleRatios) {
+      for (const [index, ratio] of sampleRatios.entries()) {
         const target = Math.min(Math.max(0, durationValue * ratio), Math.max(0, durationValue - 0.05));
         if (Math.abs(video.currentTime - target) > 0.02) {
           await new Promise<void>((resolve) => {
@@ -268,7 +264,9 @@ export const VideoUploader: React.FC<VideoUploaderProps> = ({
         luminanceFrames.push(luminance);
         brightnessValues.push(mean / 255 * 100);
         contrastValues.push(Math.min(100, Math.sqrt(variance / luminance.length) / 64 * 100));
-        if (snapshots.length < 3) snapshots.push(canvas.toDataURL('image/jpeg', 0.78));
+        if (index === 0 || index === Math.floor(sampleRatios.length / 2) || index === sampleRatios.length - 1) {
+          snapshots.push(canvas.toDataURL('image/jpeg', 0.78));
+        }
       }
 
       const frameDifference = (left: Uint8Array, right: Uint8Array) => {
@@ -278,6 +276,9 @@ export const VideoUploader: React.FC<VideoUploaderProps> = ({
       };
       const consecutiveDifferences = luminanceFrames.slice(1).map((frame, index) => frameDifference(luminanceFrames[index], frame));
       const startEndDifference = frameDifference(luminanceFrames[0], luminanceFrames[luminanceFrames.length - 1]);
+      const earlyDifference = consecutiveDifferences[0] || 0;
+      const payoffDifference = consecutiveDifferences[consecutiveDifferences.length - 1] || 0;
+      const changingIntervals = consecutiveDifferences.filter((value) => value >= 4).length;
       const videoMetrics: VideoMetrics = {
         width: sourceWidth,
         height: sourceHeight,
@@ -285,6 +286,9 @@ export const VideoUploader: React.FC<VideoUploaderProps> = ({
         contrastScore: Math.round(contrastValues.reduce((sum, value) => sum + value, 0) / contrastValues.length),
         brightnessScore: Math.round(brightnessValues.reduce((sum, value) => sum + value, 0) / brightnessValues.length),
         loopSimilarityScore: Math.round(Math.max(0, 100 - startEndDifference * 4)),
+        earlyMotionScore: Math.round(Math.min(100, earlyDifference * 5)),
+        changeFrequencyScore: Math.round(changingIntervals / Math.max(1, consecutiveDifferences.length) * 100),
+        payoffChangeScore: Math.round(Math.min(100, payoffDifference * 5)),
         sampledFrames: luminanceFrames.length,
       };
 

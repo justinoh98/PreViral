@@ -22,6 +22,9 @@ export type VideoMetrics = {
   contrastScore: number;
   brightnessScore: number;
   loopSimilarityScore: number;
+  earlyMotionScore: number;
+  changeFrequencyScore: number;
+  payoffChangeScore: number;
   sampledFrames: number;
 };
 
@@ -37,15 +40,21 @@ export function createLocalEvaluation(input: AuditInput): ReelEvaluation {
   // than invented positive observations.
   const motionFactor = metrics ? metrics.motionScore / 100 : 0.4;
   const contrastFactor = metrics ? metrics.contrastScore / 100 : 0.4;
-  const hookStars = Number(Math.max(1, Math.min(5, 1.4 + motionFactor * 2.3 + contrastFactor * 0.7 + (missingCaption ? -0.5 : 0.4))).toFixed(1));
+  const earlyMotionFactor = metrics ? metrics.earlyMotionScore / 100 : 0.35;
+  const changeFrequencyFactor = metrics ? metrics.changeFrequencyScore / 100 : 0.35;
+  const payoffFactor = metrics ? metrics.payoffChangeScore / 100 : 0.35;
+  const hookStars = Number(Math.max(1, Math.min(5, 1.0 + earlyMotionFactor * 2.2 + contrastFactor * 0.5 + (missingCaption ? 0 : 0.8))).toFixed(1));
   const durationPenalty = input.durationSeconds <= 15 ? 0 : input.durationSeconds <= 25 ? 0.3 : 0.7;
-  const pacingStars = Number(Math.max(1, Math.min(5, 1.8 + motionFactor * 2.3 - durationPenalty)).toFixed(1));
-  const narrativeStars = Number(Math.max(1, Math.min(5, 2.0 + contrastFactor * 0.8 + (missingConcept ? 0 : 0.7))).toFixed(1));
+  const pacingStars = Number(Math.max(1, Math.min(5, 1.2 + changeFrequencyFactor * 2.6 + motionFactor * 0.8 - durationPenalty)).toFixed(1));
+  const narrativeStars = Number(Math.max(1, Math.min(5, 1.3 + payoffFactor * 1.8 + (missingConcept ? 0 : 1.0))).toFixed(1));
   const loopStars = Number(Math.max(1, Math.min(5, 1.5 + (metrics?.loopSimilarityScore ?? 40) / 100 * 3)).toFixed(1));
   const resolutionPoints = metrics ? (metrics.width >= 1080 && metrics.height >= 1080 ? 1.2 : metrics.width >= 720 ? 0.7 : 0.2) : 0.4;
   const portraitPoints = metrics && metrics.height > metrics.width ? 0.7 : 0.2;
-  const techStars = Number(Math.max(1, Math.min(5, 2.0 + resolutionPoints + portraitPoints + (missingCaption ? 0 : 0.4))).toFixed(1));
-  const stars = Number((hookStars * 0.3 + pacingStars * 0.25 + narrativeStars * 0.2 + loopStars * 0.15 + techStars * 0.1).toFixed(1));
+  const shareabilityPoints = (missingConcept ? 0 : 0.4) + (missingCaption ? 0 : 0.3);
+  const techStars = Number(Math.max(1, Math.min(5, 1.5 + resolutionPoints + portraitPoints + shareabilityPoints)).toFixed(1));
+  // PDF rubric weights: Hook 30%, Pacing 25%, Narrative/Payoff 20%,
+  // Loop/Rewatch 10%, Quality/Shareability 15%.
+  const stars = Number((hookStars * 0.3 + pacingStars * 0.25 + narrativeStars * 0.2 + loopStars * 0.1 + techStars * 0.15).toFixed(1));
   const verdict = stars >= 4.2 ? 'Viral Contender' : stars >= 3.5 ? 'Strong Growth' : stars >= 2.8 ? 'Moderate Retention' : 'High Skip Risk';
   const evidenceLimit = metrics
     ? (isKo
@@ -89,7 +98,7 @@ export function createLocalEvaluation(input: AuditInput): ReelEvaluation {
         ...base.aspects.hookStrength,
         stars: hookStars,
         visualHook: metrics
-          ? (isKo ? `샘플 프레임 움직임 ${metrics.motionScore}/100, 대비 ${metrics.contrastScore}/100.` : `Sampled-frame motion ${metrics.motionScore}/100; contrast ${metrics.contrastScore}/100.`)
+          ? (isKo ? `0-3초 움직임 ${metrics.earlyMotionScore}/100, 대비 ${metrics.contrastScore}/100.` : `0-3s motion ${metrics.earlyMotionScore}/100; contrast ${metrics.contrastScore}/100.`)
           : (isKo ? '현재 브라우저 분석에서 직접 검증되지 않음.' : 'Not directly verified in the current browser analysis.'),
         textHook: missingCaption
           ? (isKo ? '입력 없음: 텍스트 훅을 평가할 수 없습니다.' : 'Not supplied: text-hook quality cannot be evaluated.')
@@ -100,25 +109,28 @@ export function createLocalEvaluation(input: AuditInput): ReelEvaluation {
       pacingAndStimulation: {
         ...base.aspects.pacingAndStimulation,
         stars: pacingStars,
+        label: isKo ? '1-2초 패턴 인터럽트' : '1-2 Second Pattern Interrupts',
         avgCutFrequencySec: metrics ? Number((input.durationSeconds / Math.max(1, metrics.sampledFrames - 1)).toFixed(1)) : 0,
         deadAirDetectedSec: 0,
         patternInterruptsCount: 0,
         verdict: metrics
-          ? (isKo ? `프레임 간 시각 변화량 ${metrics.motionScore}/100, 재생 시간 ${input.durationSeconds}초 기준.` : `Frame-to-frame visual change ${metrics.motionScore}/100 across a ${input.durationSeconds}s video.`)
+          ? (isKo ? `약 2초 간격 변화 충족률 ${metrics.changeFrequencyScore}/100, 전체 움직임 ${metrics.motionScore}/100.` : `Approx. 2-second change compliance ${metrics.changeFrequencyScore}/100; overall motion ${metrics.motionScore}/100.`)
           : (isKo ? `재생 시간 ${input.durationSeconds}초만 확인됨.` : `Only the ${input.durationSeconds}s duration was verified.`),
       },
       narrativeAndPayoff: {
         ...base.aspects.narrativeAndPayoff,
         stars: narrativeStars,
+        label: isKo ? '전개 구조 & 최종 페이오프' : 'Process Structure & Final Payoff',
         setupDurationSec: 0,
         payoffTimingSec: 0,
         verdict: missingConcept
           ? (isKo ? '기획 의도가 없어 서사 목표를 검증할 수 없음.' : 'Narrative intent was not supplied, so payoff alignment cannot be verified.')
-          : (isKo ? '입력된 기획 의도만 기준으로 평가함. 실제 전개 시점은 미검증.' : 'Scored from the stated intent only; actual story timing was not verified.'),
+          : (isKo ? `입력된 기획 의도와 후반 프레임 변화량 ${metrics?.payoffChangeScore ?? 0}/100 기준.` : `Based on the stated intent and final-frame change score of ${metrics?.payoffChangeScore ?? 0}/100.`),
       },
       loopingAndRetention: {
         ...base.aspects.loopingAndRetention,
         stars: loopStars,
+        label: isKo ? '루프 연속성 & 재시청 유도' : 'Loop Continuity & Rewatch Trigger',
         seamlessLoopScore: metrics?.loopSimilarityScore ?? 50,
         rewatchTriggerPresent: (metrics?.loopSimilarityScore ?? 0) >= 70,
         verdict: metrics
@@ -128,12 +140,13 @@ export function createLocalEvaluation(input: AuditInput): ReelEvaluation {
       technicalCompliance: {
         ...base.aspects.technicalCompliance,
         stars: techStars,
+        label: isKo ? '품질 & 공유 가능성' : 'Quality & Shareability',
         watermarkDetected: false,
         resolutionText: metrics ? `${metrics.width} × ${metrics.height}` : (isKo ? '해상도 미검증' : 'Resolution not verified'),
         safeZoneViolation: false,
         captionQuality: missingCaption ? (isKo ? '입력 없음' : 'Not supplied') : (isKo ? '입력 텍스트만 확인' : 'Supplied text only'),
         verdict: metrics
-          ? (isKo ? `${input.fileFormat}, ${metrics.width}×${metrics.height}, ${metrics.height > metrics.width ? '세로형' : '가로형'} 영상.` : `${input.fileFormat}, ${metrics.width}×${metrics.height}, ${metrics.height > metrics.width ? 'portrait' : 'landscape'} video.`)
+          ? (isKo ? `${input.fileFormat}, ${metrics.width}×${metrics.height}, ${metrics.height > metrics.width ? '세로형' : '가로형'}; 공유성은 입력된 가치·컨셉 기준.` : `${input.fileFormat}, ${metrics.width}×${metrics.height}, ${metrics.height > metrics.width ? 'portrait' : 'landscape'}; shareability uses the supplied value and concept.`)
           : (isKo ? `${input.fileFormat} 형식만 확인됨.` : `Only the ${input.fileFormat} format was verified.`),
       },
     },

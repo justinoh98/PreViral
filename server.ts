@@ -39,13 +39,6 @@ function createVideoSignature(data: {
 
   const rawKey = [
     contentHash || snapshotFingerprint || `${Number(data.fileSizeMb) || 0}:${Number(data.durationSeconds) || 0}`,
-    data.niche || '',
-    data.captionInput || '',
-    data.videoConcept || '',
-    data.audioType || '',
-    Boolean(data.hasWatermark),
-    Boolean(data.detectedAudioSilence),
-    data.language || 'en',
   ].join('::');
 
   return crypto.createHash('md5').update(rawKey).digest('hex');
@@ -322,11 +315,12 @@ You MUST strictly align all generated recommendations (recommendedHooks, valueCT
 }
 
 Objective Evaluation Rubric:
-1. **Zero-Second Hook (0-3s)** (30% Weight): Immediate visual motion, curiosity gap text overlay, and instant audio. Penalize severely for static intros or silent buildup.
-2. **Pacing & Pattern Interrupts (3-12s)** (25% Weight): Cut frequency every 1.5-2s, elimination of dead air (>0.3s silence/stagnation), use of B-roll or zooms.
-3. **Narrative Arc & Payoff** (20% Weight): Clear Setup -> Process -> Satisfying Payoff delivered efficiently before video end.
-4. **Loopability & Retention** (15% Weight): Smooth start/end frame connection and explicit rewatch incentives.
-5. **Technical & Unconnected Reach** (10% Weight): 1080p resolution, no watermarks, center safe-zone text placement, and shareability via DMs.
+This rubric is derived from the supplied Reel Low-Skip Checklist and General Guideline for High-Retention & Growth-Focused Reels:
+1. **Critical Hook (0-3s)** (30% Weight): Most striking visual immediately, clear first-frame text promise/curiosity gap, immediate audio, and zero slow buildup.
+2. **Pacing & Stimulation (3-12s)** (25% Weight): Meaningful visual or audio change every 1-2 seconds, no dead time, compressed processes, and every clip adding information, value, or visual interest.
+3. **Narrative & Payoff** (20% Weight): Immediate setup/promise, fast visually clear process, and a satisfying final reveal delivered without delay.
+4. **Looping & Rewatch** (10% Weight): Visual/audio continuity between final and first frames plus a legitimate rewatch trigger.
+5. **Quality & Shareability** (15% Weight): 1080p clean export, no external watermark, readable captions in safe zones, platform-native/trending or original audio, clear niche authority, and sufficient usefulness, surprise, uniqueness, relatability, or aesthetic value to merit a DM send.
 
 Compute overallStars as the exact objective weighted average of these 5 aspect ratings.
 Ensure overallScorePercent is exactly round(overallStars * 20).
