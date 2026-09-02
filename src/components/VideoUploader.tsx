@@ -4,6 +4,7 @@ import { getPresetReels } from '../data/presets';
 import { PresetReel, ReelEvaluation } from '../types';
 import { SafeZoneOverlay } from './SafeZoneOverlay';
 import { useLanguage } from '../i18n';
+import { createLocalEvaluation } from '../localFallback';
 
 interface VideoUploaderProps {
   onEvaluationComplete: (evaluation: ReelEvaluation) => void;
@@ -207,18 +208,22 @@ export const VideoUploader: React.FC<VideoUploaderProps> = ({
         2400
       );
 
+      const auditInput = {
+        title: videoTitle || (language === 'ko' ? '업로드된 릴스' : 'Uploaded Reel'),
+        durationSeconds: duration,
+        fileFormat,
+        fileSizeMb,
+        niche,
+        captionInput,
+        videoConcept,
+        audioType,
+        language,
+      };
       const response = await fetch('/api/evaluate-reel', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          title: videoTitle || (language === 'ko' ? '업로드된 릴스' : 'Uploaded Reel'),
-          durationSeconds: duration,
-          fileFormat,
-          fileSizeMb,
-          niche,
-          captionInput,
-          videoConcept,
-          audioType,
+          ...auditInput,
           frameSnapshots,
           hasWatermark: false,
           detectedAudioSilence: false,
@@ -226,10 +231,23 @@ export const VideoUploader: React.FC<VideoUploaderProps> = ({
         }),
       });
 
-      const evaluationData: ReelEvaluation = await response.json();
+      const evaluationData: ReelEvaluation = response.ok
+        ? await response.json()
+        : createLocalEvaluation(auditInput);
       onEvaluationComplete(evaluationData);
     } catch (err) {
-      console.error('Failed to evaluate reel:', err);
+      const evaluationData = createLocalEvaluation({
+        title: videoTitle || (language === 'ko' ? '업로드된 릴스' : 'Uploaded Reel'),
+        durationSeconds: duration,
+        fileFormat,
+        fileSizeMb,
+        niche,
+        captionInput,
+        videoConcept,
+        audioType,
+        language,
+      });
+      onEvaluationComplete(evaluationData);
     } finally {
       setIsEvaluating(false);
     }

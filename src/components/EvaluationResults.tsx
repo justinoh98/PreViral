@@ -24,6 +24,7 @@ import {
 import { ReelEvaluation } from '../types';
 import { StarRating } from './StarRating';
 import { useLanguage } from '../i18n';
+import { createLocalCaptions } from '../localFallback';
 
 interface EvaluationResultsProps {
   evaluation: ReelEvaluation;
@@ -79,10 +80,12 @@ export const EvaluationResults: React.FC<EvaluationResultsProps> = ({
           language,
         }),
       });
-      const data = await res.json();
+      const data = res.ok
+        ? await res.json()
+        : createLocalCaptions(customTopic, evaluation.niche, language);
       setGeneratedCaptions(data);
     } catch (e) {
-      console.error(e);
+      setGeneratedCaptions(createLocalCaptions(customTopic, evaluation.niche, language));
     } finally {
       setIsGeneratingCaptions(false);
     }
