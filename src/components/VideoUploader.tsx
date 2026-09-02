@@ -104,11 +104,11 @@ export const VideoUploader: React.FC<VideoUploaderProps> = ({
 
   const createEvaluationCacheKey = async (contentHash: string) => {
     const context = JSON.stringify({
-      scoringVersion: 3,
+      scoringVersion: 4,
       contentHash,
     });
     const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(context));
-    return `previral:evaluation:v3:${Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, '0')).join('')}`;
+    return `previral:evaluation:v4:${Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, '0')).join('')}`;
   };
 
   // Device media is requested only after an explicit user action. The browser's

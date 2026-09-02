@@ -43,18 +43,32 @@ export function createLocalEvaluation(input: AuditInput): ReelEvaluation {
   const earlyMotionFactor = metrics ? metrics.earlyMotionScore / 100 : 0.35;
   const changeFrequencyFactor = metrics ? metrics.changeFrequencyScore / 100 : 0.35;
   const payoffFactor = metrics ? metrics.payoffChangeScore / 100 : 0.35;
-  const hookStars = Number(Math.max(1, Math.min(5, 1.0 + earlyMotionFactor * 2.2 + contrastFactor * 0.5 + (missingCaption ? 0 : 0.8))).toFixed(1));
+  let hookStars = 0.5 + earlyMotionFactor * 3.2 + contrastFactor * 0.4 + (missingCaption ? 0 : 0.7);
+  if (missingCaption) hookStars = Math.min(hookStars, 2.3);
+  if ((metrics?.earlyMotionScore ?? 0) < 35) hookStars = Math.min(hookStars, 2.5);
+  hookStars = Number(Math.max(0.5, Math.min(5, hookStars)).toFixed(1));
   const durationPenalty = input.durationSeconds <= 15 ? 0 : input.durationSeconds <= 25 ? 0.3 : 0.7;
-  const pacingStars = Number(Math.max(1, Math.min(5, 1.2 + changeFrequencyFactor * 2.6 + motionFactor * 0.8 - durationPenalty)).toFixed(1));
-  const narrativeStars = Number(Math.max(1, Math.min(5, 1.3 + payoffFactor * 1.8 + (missingConcept ? 0 : 1.0))).toFixed(1));
-  const loopStars = Number(Math.max(1, Math.min(5, 1.5 + (metrics?.loopSimilarityScore ?? 40) / 100 * 3)).toFixed(1));
-  const resolutionPoints = metrics ? (metrics.width >= 1080 && metrics.height >= 1080 ? 1.2 : metrics.width >= 720 ? 0.7 : 0.2) : 0.4;
-  const portraitPoints = metrics && metrics.height > metrics.width ? 0.7 : 0.2;
-  const shareabilityPoints = (missingConcept ? 0 : 0.4) + (missingCaption ? 0 : 0.3);
-  const techStars = Number(Math.max(1, Math.min(5, 1.5 + resolutionPoints + portraitPoints + shareabilityPoints)).toFixed(1));
+  let pacingStars = 0.5 + changeFrequencyFactor * 3.3 + motionFactor * 0.7 - durationPenalty;
+  if ((metrics?.changeFrequencyScore ?? 0) < 50) pacingStars = Math.min(pacingStars, 2.4);
+  pacingStars = Number(Math.max(0.5, Math.min(5, pacingStars)).toFixed(1));
+  let narrativeStars = 0.7 + payoffFactor * 2.8 + (missingConcept ? 0 : 1.0);
+  if (missingConcept) narrativeStars = Math.min(narrativeStars, 2.2);
+  if ((metrics?.payoffChangeScore ?? 0) < 30) narrativeStars = Math.min(narrativeStars, 2.5);
+  narrativeStars = Number(Math.max(0.5, Math.min(5, narrativeStars)).toFixed(1));
+  // Frame similarity alone does not prove a seamless audio loop or a rewatch trigger.
+  const loopStars = Number(Math.max(0.5, Math.min(3.8, 0.6 + (metrics?.loopSimilarityScore ?? 30) / 100 * 3.2)).toFixed(1));
+  const resolutionPoints = metrics ? (metrics.width >= 1080 && metrics.height >= 1080 ? 1.8 : metrics.width >= 720 ? 0.6 : 0.1) : 0.2;
+  const portraitPoints = metrics && metrics.height > metrics.width ? 0.8 : 0.1;
+  const shareabilityPoints = (missingConcept ? 0 : 0.3) + (missingCaption ? 0 : 0.3);
+  let techStars = 0.8 + resolutionPoints + portraitPoints + shareabilityPoints;
+  if (!metrics || metrics.width < 1080 || metrics.height < 1080) techStars = Math.min(techStars, 2.6);
+  techStars = Number(Math.max(0.5, Math.min(5, techStars)).toFixed(1));
   // PDF rubric weights: Hook 30%, Pacing 25%, Narrative/Payoff 20%,
   // Loop/Rewatch 10%, Quality/Shareability 15%.
-  const stars = Number((hookStars * 0.3 + pacingStars * 0.25 + narrativeStars * 0.2 + loopStars * 0.1 + techStars * 0.15).toFixed(1));
+  const failedCorePillars = [hookStars, pacingStars, narrativeStars].filter((score) => score < 2.5).length;
+  const evidencePenalty = failedCorePillars * 0.15 + (missingCaption ? 0.1 : 0) + (missingConcept ? 0.1 : 0);
+  const weightedScore = hookStars * 0.3 + pacingStars * 0.25 + narrativeStars * 0.2 + loopStars * 0.1 + techStars * 0.15;
+  const stars = Number(Math.max(0.5, weightedScore - evidencePenalty).toFixed(1));
   const verdict = stars >= 4.2 ? 'Viral Contender' : stars >= 3.5 ? 'Strong Growth' : stars >= 2.8 ? 'Moderate Retention' : 'High Skip Risk';
   const evidenceLimit = metrics
     ? (isKo

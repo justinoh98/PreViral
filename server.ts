@@ -283,6 +283,10 @@ CRITICAL EVALUATION MANDATE:
 - Every deduction and every positive score must be traceable to a specific observed frame, timestamp, measurable property, or supplied context.
 - If evidence is unavailable, state that it was not verifiable and score conservatively; never fabricate cuts, silence, captions, resolution, safe-zone placement, narrative beats, or loop quality.
 - Treat the title and filename as display identifiers only. They must never raise, lower, or otherwise influence any rating.
+- Begin each criterion at 0, then award points only for verified evidence. Do not begin from 5 and deduct.
+- Cap a criterion at 2.5/5 when its central requirement is absent or unverified. A strong secondary trait cannot cancel a failed core requirement.
+- Scores above 4.0 require clear evidence that every listed requirement in that criterion is satisfied. Scores above 4.5 must be exceptional and rare.
+- Apply deductions cumulatively. Do not soften a low score to be encouraging, visually balanced, or polite.
 - Act as an algorithm auditor that penalizes flaws heavily (e.g. dead air >0.3s, lack of instant visual motion at second 0, missing captions, low contrast, absent CTA, long setup delay).
 - Highlight specific defects and weaknesses explicitly in \`criticalDefectsIdentified\`.
 ${languageInstruction}
