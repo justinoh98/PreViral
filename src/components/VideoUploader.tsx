@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Upload, Film, Play, Pause, Sparkles, Check, AlertCircle, FileVideo, Music2, Tag, MessageSquare, RotateCcw, Lightbulb } from 'lucide-react';
+import { Upload, Film, Play, Pause, Sparkles, Check, AlertCircle, FileVideo, Music2, Tag, MessageSquare, RotateCcw, Lightbulb, ShieldCheck } from 'lucide-react';
 import { getPresetReels } from '../data/presets';
 import { PresetReel, ReelEvaluation } from '../types';
 import { SafeZoneOverlay } from './SafeZoneOverlay';
@@ -58,6 +58,15 @@ export const VideoUploader: React.FC<VideoUploaderProps> = ({
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Device media is requested only after an explicit user action. The browser's
+  // native picker grants access only to the file the user selects.
+  const openMediaPicker = () => {
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+      fileInputRef.current.click();
+    }
+  };
 
   // Handle local video file selection
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -299,23 +308,33 @@ export const VideoUploader: React.FC<VideoUploaderProps> = ({
             <div
               onDragOver={(e) => e.preventDefault()}
               onDrop={handleDrop}
-              onClick={() => fileInputRef.current?.click()}
-              className="border-2 border-dashed border-gray-200 hover:border-indigo-500 bg-slate-50/70 hover:bg-slate-50 rounded-2xl p-8 flex flex-col items-center justify-center text-center cursor-pointer transition-all group min-h-[320px]"
+              className="border-2 border-dashed border-gray-200 hover:border-indigo-500 bg-slate-50/70 hover:bg-slate-50 rounded-2xl p-8 flex flex-col items-center justify-center text-center transition-all group min-h-[320px]"
             >
               <input
                 ref={fileInputRef}
                 type="file"
-                accept="video/*,.mp4,.mov,.avi,.webm,.mkv"
+                accept="video/*"
                 onChange={handleFileChange}
                 className="hidden"
+                aria-label={t('browseMedia')}
               />
               <div className="w-16 h-16 rounded-2xl bg-indigo-50 text-indigo-600 border border-indigo-100 flex items-center justify-center mb-4 group-hover:scale-110 transition-transform shadow-sm">
                 <FileVideo className="w-8 h-8" />
               </div>
-              <h3 className="font-bold text-slate-800 text-base">
-                {t('dragDropTitle')} <span className="text-indigo-600 underline">{t('browseFile')}</span>
-              </h3>
+              <h3 className="font-bold text-slate-800 text-base">{t('dragDropTitle')}</h3>
               <p className="text-xs text-slate-500 mt-1 max-w-sm">{t('dragDropSub')}</p>
+              <button
+                type="button"
+                onClick={openMediaPicker}
+                className="mt-4 inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-indigo-600 px-5 py-2.5 text-sm font-bold text-white shadow-sm transition-colors hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2"
+              >
+                <FileVideo className="h-4 w-4" />
+                {t('browseMedia')}
+              </button>
+              <p className="mt-3 flex max-w-sm items-start justify-center gap-1.5 text-[11px] leading-relaxed text-slate-500">
+                <ShieldCheck className="mt-0.5 h-3.5 w-3.5 shrink-0 text-green-600" />
+                <span>{t('mediaPermissionNotice')}</span>
+              </p>
               <div className="flex items-center gap-2 mt-4 text-[11px] text-slate-500 font-medium flex-wrap justify-center">
                 <span className="flex items-center gap-1"><Check className="w-3.5 h-3.5 text-green-600" /> {t('check1080p')}</span>
                 <span className="flex items-center gap-1"><Check className="w-3.5 h-3.5 text-green-600" /> {t('checkHook')}</span>
