@@ -2,7 +2,8 @@ import express from 'express';
 import path from 'path';
 import crypto from 'crypto';
 import { createServer as createViteServer } from 'vite';
-import { GoogleGenAI, Type } from '@google/genai';
+
+const OPENAI_MODEL = process.env.OPENAI_MODEL || 'gpt-5.6-terra';
 
 // In-memory evaluation cache to ensure static ratings for identical video uploads
 const evaluationCache = new Map<string, any>();
@@ -163,21 +164,41 @@ async function startServer() {
   app.use(express.json({ limit: '100mb' }));
   app.use(express.urlencoded({ limit: '100mb', extended: true }));
 
-  // Initialize Gemini AI Client
-  const getGeminiClient = () => {
-    const apiKey = process.env.GEMINI_API_KEY;
+  // The Responses API is used directly so this server has no browser-side API key exposure.
+  const getOpenAIApiKey = () => {
+    const apiKey = process.env.OPENAI_API_KEY;
     if (!apiKey) {
-      console.warn('GEMINI_API_KEY is missing. Using fallback response generator.');
+      console.warn('OPENAI_API_KEY is missing. Using fallback response generator.');
       return null;
     }
-    return new GoogleGenAI({
-      apiKey: apiKey,
-      httpOptions: {
-        headers: {
-          'User-Agent': 'aistudio-build',
-        },
+    return apiKey;
+  };
+
+  const createOpenAIResponse = async (apiKey: string, input: unknown) => {
+    const response = await fetch('https://api.openai.com/v1/responses', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
       },
+      body: JSON.stringify({
+        model: OPENAI_MODEL,
+        input,
+        store: false,
+        reasoning: { effort: 'low' },
+        text: { format: { type: 'json_object' }, verbosity: 'medium' },
+      }),
     });
+
+    if (!response.ok) {
+      throw new Error(`OpenAI Responses API failed (${response.status}): ${await response.text()}`);
+    }
+
+    const payload = await response.json() as { output_text?: string };
+    if (!payload.output_text) {
+      throw new Error('OpenAI Responses API returned no output text.');
+    }
+    return JSON.parse(payload.output_text);
   };
 
   // Health check endpoint
@@ -228,9 +249,9 @@ async function startServer() {
         });
       }
 
-      const ai = getGeminiClient();
+      const openAIApiKey = getOpenAIApiKey();
 
-      if (!ai) {
+      if (!openAIApiKey) {
         // Fallback realistic AI evaluation if API key is not populated
         const mockResult = generateFallbackEvaluation({
           title,
@@ -316,171 +337,18 @@ Assign overallVerdict objectively based on overallStars:
 
 Return a STRICT JSON response adhering to this JSON Schema.`;
 
-      const contentsParts: any[] = [{ text: promptText }];
-
-      // Include frame snapshots if provided
-      if (Array.isArray(frameSnapshots) && frameSnapshots.length > 0) {
-        frameSnapshots.slice(0, 3).forEach((snap: string) => {
-          if (typeof snap === 'string' && snap.includes('base64,')) {
-            const base64Data = snap.split('base64,')[1];
-            contentsParts.push({
-              inlineData: {
-                mimeType: 'image/jpeg',
-                data: base64Data,
-              },
-            });
+      const content: Array<Record<string, string>> = [{ type: 'input_text', text: promptText }];
+      if (Array.isArray(frameSnapshots)) {
+        for (const snapshot of frameSnapshots.slice(0, 3)) {
+          if (typeof snapshot === 'string' && snapshot.startsWith('data:image/')) {
+            content.push({ type: 'input_image', image_url: snapshot, detail: 'low' });
           }
-        });
+        }
       }
 
-      const response = await ai.models.generateContent({
-        model: 'gemini-3.6-flash',
-        contents: { parts: contentsParts },
-        config: {
-          responseMimeType: 'application/json',
-          responseSchema: {
-            type: Type.OBJECT,
-            properties: {
-              overallStars: { type: Type.NUMBER, description: 'Overall rating from 0.0 to 5.0 stars' },
-              overallScorePercent: { type: Type.INTEGER, description: 'Overall score from 0 to 100' },
-              overallVerdict: {
-                type: Type.STRING,
-                enum: ['Viral Contender', 'Strong Growth', 'Moderate Retention', 'High Skip Risk'],
-              },
-              expectedSkipRatePercent: { type: Type.INTEGER, description: 'Estimated skip rate %' },
-              followerGrowthPotentialPercent: { type: Type.INTEGER, description: 'Follower growth potential %' },
-              nonFollowerInterestStars: { type: Type.NUMBER, description: 'Non-follower interest score 0.0 to 5.0' },
-              shareabilitySendScore: { type: Type.INTEGER, description: 'DM shareability score 0 to 100' },
-              criticalDefectsIdentified: {
-                type: Type.ARRAY,
-                items: { type: Type.STRING },
-                description: 'List of objective flaws identified',
-              },
-              aspects: {
-                type: Type.OBJECT,
-                properties: {
-                  hookStrength: {
-                    type: Type.OBJECT,
-                    properties: {
-                      stars: { type: Type.NUMBER },
-                      label: { type: Type.STRING },
-                      visualHook: { type: Type.STRING },
-                      textHook: { type: Type.STRING },
-                      audioHook: { type: Type.STRING },
-                      verdict: { type: Type.STRING },
-                    },
-                    required: ['stars', 'label', 'visualHook', 'textHook', 'audioHook', 'verdict'],
-                  },
-                  pacingAndStimulation: {
-                    type: Type.OBJECT,
-                    properties: {
-                      stars: { type: Type.NUMBER },
-                      label: { type: Type.STRING },
-                      avgCutFrequencySec: { type: Type.NUMBER },
-                      deadAirDetectedSec: { type: Type.NUMBER },
-                      patternInterruptsCount: { type: Type.INTEGER },
-                      verdict: { type: Type.STRING },
-                    },
-                    required: ['stars', 'label', 'avgCutFrequencySec', 'deadAirDetectedSec', 'patternInterruptsCount', 'verdict'],
-                  },
-                  narrativeAndPayoff: {
-                    type: Type.OBJECT,
-                    properties: {
-                      stars: { type: Type.NUMBER },
-                      label: { type: Type.STRING },
-                      setupDurationSec: { type: Type.NUMBER },
-                      payoffTimingSec: { type: Type.NUMBER },
-                      verdict: { type: Type.STRING },
-                    },
-                    required: ['stars', 'label', 'setupDurationSec', 'payoffTimingSec', 'verdict'],
-                  },
-                  loopingAndRetention: {
-                    type: Type.OBJECT,
-                    properties: {
-                      stars: { type: Type.NUMBER },
-                      label: { type: Type.STRING },
-                      seamlessLoopScore: { type: Type.INTEGER },
-                      rewatchTriggerPresent: { type: Type.BOOLEAN },
-                      verdict: { type: Type.STRING },
-                    },
-                    required: ['stars', 'label', 'seamlessLoopScore', 'rewatchTriggerPresent', 'verdict'],
-                  },
-                  technicalCompliance: {
-                    type: Type.OBJECT,
-                    properties: {
-                      stars: { type: Type.NUMBER },
-                      label: { type: Type.STRING },
-                      watermarkDetected: { type: Type.BOOLEAN },
-                      resolutionText: { type: Type.STRING },
-                      safeZoneViolation: { type: Type.BOOLEAN },
-                      captionQuality: { type: Type.STRING },
-                      verdict: { type: Type.STRING },
-                    },
-                    required: ['stars', 'label', 'watermarkDetected', 'resolutionText', 'safeZoneViolation', 'captionQuality', 'verdict'],
-                  },
-                },
-                required: ['hookStrength', 'pacingAndStimulation', 'narrativeAndPayoff', 'loopingAndRetention', 'technicalCompliance'],
-              },
-              actionableEdits: {
-                type: Type.ARRAY,
-                items: {
-                  type: Type.OBJECT,
-                  properties: {
-                    id: { type: Type.STRING },
-                    timestampRange: { type: Type.STRING },
-                    type: { type: Type.STRING, enum: ['cut', 'hook', 'pacing', 'audio', 'safezone', 'payoff'] },
-                    severity: { type: Type.STRING, enum: ['critical', 'recommended', 'optional'] },
-                    issue: { type: Type.STRING },
-                    solution: { type: Type.STRING },
-                  },
-                  required: ['id', 'timestampRange', 'type', 'severity', 'issue', 'solution'],
-                },
-              },
-              captionOptimization: {
-                type: Type.OBJECT,
-                properties: {
-                  recommendedHooks: { type: Type.ARRAY, items: { type: Type.STRING } },
-                  valueCTA: { type: Type.STRING },
-                  cliffhangerCTA: { type: Type.STRING },
-                  commentBaitQuestion: { type: Type.STRING },
-                  targetHashtags: { type: Type.ARRAY, items: { type: Type.STRING } },
-                },
-                required: ['recommendedHooks', 'valueCTA', 'cliffhangerCTA', 'commentBaitQuestion', 'targetHashtags'],
-              },
-              stanceByStanceGuidance: {
-                type: Type.ARRAY,
-                items: {
-                  type: Type.OBJECT,
-                  properties: {
-                    durationRange: { type: Type.STRING },
-                    stanceTheme: { type: Type.STRING },
-                    optionAHookText: { type: Type.STRING },
-                    optionBHookText: { type: Type.STRING },
-                    optionCHookText: { type: Type.STRING },
-                    onScreenGuidance: { type: Type.STRING },
-                  },
-                  required: ['durationRange', 'stanceTheme', 'optionAHookText', 'optionBHookText', 'optionCHookText', 'onScreenGuidance'],
-                },
-              },
-            },
-            required: [
-              'overallStars',
-              'overallScorePercent',
-              'overallVerdict',
-              'expectedSkipRatePercent',
-              'followerGrowthPotentialPercent',
-              'nonFollowerInterestStars',
-              'shareabilitySendScore',
-              'aspects',
-              'actionableEdits',
-              'captionOptimization',
-            ],
-          },
-        },
-      });
-
-      const responseText = response.text || '';
-      const evaluationData = JSON.parse(responseText);
+      const evaluationData = await createOpenAIResponse(openAIApiKey, [
+        { role: 'user', content },
+      ]);
 
       // Ensure stanceByStanceGuidance is populated if caption is missing
       if (isCaptionMissing && (!evaluationData.stanceByStanceGuidance || evaluationData.stanceByStanceGuidance.length === 0)) {
@@ -540,9 +408,9 @@ Return a STRICT JSON response adhering to this JSON Schema.`;
   app.post('/api/generate-captions', async (req, res) => {
     try {
       const { topic, niche, tone, language = 'en' } = req.body;
-      const ai = getGeminiClient();
+      const openAIApiKey = getOpenAIApiKey();
 
-      if (!ai) {
+      if (!openAIApiKey) {
         if (language === 'ko') {
           return res.json({
             hooks: [
@@ -575,26 +443,7 @@ Return a STRICT JSON response adhering to this JSON Schema.`;
           ? `Generate high-retention viral Instagram Reel hooks and caption packages for a video about "${topic || 'creative tutorial'}" in the "${niche || 'General'}" niche with a "${tone || 'energetic'}" tone. CRITICAL: Generate ALL text in fluent, natural human Korean (한국어).`
           : `Generate high-retention viral Instagram Reel hooks and caption packages for a video about "${topic || 'creative tutorial'}" in the "${niche || 'General'}" niche with a "${tone || 'energetic'}" tone. Follow 2026 Instagram growth principles.`;
 
-      const response = await ai.models.generateContent({
-        model: 'gemini-3.6-flash',
-        contents: prompt,
-        config: {
-          responseMimeType: 'application/json',
-          responseSchema: {
-            type: Type.OBJECT,
-            properties: {
-              hooks: { type: Type.ARRAY, items: { type: Type.STRING } },
-              valueCTA: { type: Type.STRING },
-              cliffhangerCTA: { type: Type.STRING },
-              commentBaitQuestion: { type: Type.STRING },
-              hashtags: { type: Type.ARRAY, items: { type: Type.STRING } },
-            },
-            required: ['hooks', 'valueCTA', 'cliffhangerCTA', 'commentBaitQuestion', 'hashtags'],
-          },
-        },
-      });
-
-      return res.json(JSON.parse(response.text || '{}'));
+      return res.json(await createOpenAIResponse(openAIApiKey, prompt));
     } catch (err) {
       console.error('Caption generator error:', err);
       return res.status(500).json({ error: 'Failed to generate captions' });

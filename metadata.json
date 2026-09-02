@@ -2,5 +2,5 @@
   "name": "PreViral",
   "description": "PreViral - Instagram Reel Quality & Algorithm Growth Analyzer before posting to optimize retention, hooks, and viral reach.",
   "requestFramePermissions": [],
-  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_OPENAI_API"]
 }
