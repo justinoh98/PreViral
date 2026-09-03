@@ -14,6 +14,7 @@ const evaluationCache = new Map<string, any>();
 
 function createVideoSignature(data: {
   title?: string;
+  videoContentHash?: string;
   durationSeconds?: number;
   fileFormat?: string;
   fileSizeMb?: number;
@@ -26,15 +27,7 @@ function createVideoSignature(data: {
   frameSnapshots?: string[];
   language?: string;
 }): string {
-  const normTitle = (data.title || '').trim().toLowerCase();
-  const normCaption = (data.captionInput || '').trim().toLowerCase();
-  const normConcept = (data.videoConcept || '').trim().toLowerCase();
-  const normAudio = (data.audioType || '').trim().toLowerCase();
-  const normNiche = (data.niche || '').trim().toLowerCase();
-  const normFormat = (data.fileFormat || '').trim().toLowerCase();
-  const lang = (data.language || 'en').trim().toLowerCase();
-  const duration = Number(data.durationSeconds) || 0;
-  const fileSize = Number(data.fileSizeMb) || 0;
+  const contentHash = (data.videoContentHash || '').trim();
 
   // Build snapshot fingerprint from snapshot lengths and ending characters
   let snapshotFingerprint = '';
@@ -45,18 +38,7 @@ function createVideoSignature(data: {
   }
 
   const rawKey = [
-    normTitle,
-    duration,
-    normFormat,
-    fileSize,
-    normNiche,
-    normCaption,
-    normConcept,
-    normAudio,
-    Boolean(data.hasWatermark),
-    Boolean(data.detectedAudioSilence),
-    snapshotFingerprint,
-    lang,
+    contentHash || snapshotFingerprint || `${Number(data.fileSizeMb) || 0}:${Number(data.durationSeconds) || 0}`,
   ].join('::');
 
   return crypto.createHash('md5').update(rawKey).digest('hex');
@@ -223,6 +205,7 @@ async function startServer() {
         captionInput,
         videoConcept,
         audioType,
+        videoContentHash,
         frameSnapshots,
         hasWatermark,
         detectedAudioSilence,
@@ -231,7 +214,7 @@ async function startServer() {
 
       // Requirement A: Exact same video static ratings check
       const videoSignature = createVideoSignature({
-        title,
+        videoContentHash,
         durationSeconds,
         fileFormat,
         fileSizeMb,
@@ -250,6 +233,7 @@ async function startServer() {
         const cachedEvaluation = evaluationCache.get(videoSignature);
         return res.json({
           ...cachedEvaluation,
+          title: title || cachedEvaluation.title,
           isCachedEvaluation: true,
         });
       }
@@ -293,7 +277,16 @@ async function startServer() {
       const promptText = `You are a strictly objective, uncompromising Instagram Reels & Short-Form Video Algorithm Auditor in 2026.
 You are evaluating a Reel prior to publishing. Your evaluation MUST be strictly objective, critical, and evidence-based. 
 CRITICAL EVALUATION MANDATE:
-- Do NOT give polite or artificially inflated ratings. Be tough and unforgiving.
+- Use only measurable visual evidence, supplied context, and the rubric below. Do not infer facts that are not visible or provided.
+- Separate observations from predictions. Never present an algorithm forecast as a verified outcome.
+- Do NOT give polite, promotional, or artificially inflated ratings. Apply identical evidence thresholds to every creator and niche.
+- Every deduction and every positive score must be traceable to a specific observed frame, timestamp, measurable property, or supplied context.
+- If evidence is unavailable, state that it was not verifiable and score conservatively; never fabricate cuts, silence, captions, resolution, safe-zone placement, narrative beats, or loop quality.
+- Treat the title and filename as display identifiers only. They must never raise, lower, or otherwise influence any rating.
+- Begin each criterion at 0, then award points only for verified evidence. Do not begin from 5 and deduct.
+- Cap a criterion at 2.5/5 when its central requirement is absent or unverified. A strong secondary trait cannot cancel a failed core requirement.
+- Scores above 4.0 require clear evidence that every listed requirement in that criterion is satisfied. Scores above 4.5 must be exceptional and rare.
+- Apply deductions cumulatively. Do not soften a low score to be encouraging, visually balanced, or polite.
 - Act as an algorithm auditor that penalizes flaws heavily (e.g. dead air >0.3s, lack of instant visual motion at second 0, missing captions, low contrast, absent CTA, long setup delay).
 - Highlight specific defects and weaknesses explicitly in \`criticalDefectsIdentified\`.
 ${languageInstruction}
@@ -326,11 +319,12 @@ You MUST strictly align all generated recommendations (recommendedHooks, valueCT
 }
 
 Objective Evaluation Rubric:
-1. **Zero-Second Hook (0-3s)** (30% Weight): Immediate visual motion, curiosity gap text overlay, and instant audio. Penalize severely for static intros or silent buildup.
-2. **Pacing & Pattern Interrupts (3-12s)** (25% Weight): Cut frequency every 1.5-2s, elimination of dead air (>0.3s silence/stagnation), use of B-roll or zooms.
-3. **Narrative Arc & Payoff** (20% Weight): Clear Setup -> Process -> Satisfying Payoff delivered efficiently before video end.
-4. **Loopability & Retention** (15% Weight): Smooth start/end frame connection and explicit rewatch incentives.
-5. **Technical & Unconnected Reach** (10% Weight): 1080p resolution, no watermarks, center safe-zone text placement, and shareability via DMs.
+This rubric is derived from the supplied Reel Low-Skip Checklist and General Guideline for High-Retention & Growth-Focused Reels:
+1. **Critical Hook (0-3s)** (30% Weight): Most striking visual immediately, clear first-frame text promise/curiosity gap, immediate audio, and zero slow buildup.
+2. **Pacing & Stimulation (3-12s)** (25% Weight): Meaningful visual or audio change every 1-2 seconds, no dead time, compressed processes, and every clip adding information, value, or visual interest.
+3. **Narrative & Payoff** (20% Weight): Immediate setup/promise, fast visually clear process, and a satisfying final reveal delivered without delay.
+4. **Looping & Rewatch** (10% Weight): Visual/audio continuity between final and first frames plus a legitimate rewatch trigger.
+5. **Quality & Shareability** (15% Weight): 1080p clean export, no external watermark, readable captions in safe zones, platform-native/trending or original audio, clear niche authority, and sufficient usefulness, surprise, uniqueness, relatability, or aesthetic value to merit a DM send.
 
 Compute overallStars as the exact objective weighted average of these 5 aspect ratings.
 Ensure overallScorePercent is exactly round(overallStars * 20).

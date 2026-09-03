@@ -24,6 +24,7 @@ import {
 import { ReelEvaluation } from '../types';
 import { StarRating } from './StarRating';
 import { useLanguage } from '../i18n';
+import { createLocalCaptions } from '../localFallback';
 
 interface EvaluationResultsProps {
   evaluation: ReelEvaluation;
@@ -79,10 +80,12 @@ export const EvaluationResults: React.FC<EvaluationResultsProps> = ({
           language,
         }),
       });
-      const data = await res.json();
+      const data = res.ok
+        ? await res.json()
+        : createLocalCaptions(customTopic, evaluation.niche, language);
       setGeneratedCaptions(data);
     } catch (e) {
-      console.error(e);
+      setGeneratedCaptions(createLocalCaptions(customTopic, evaluation.niche, language));
     } finally {
       setIsGeneratingCaptions(false);
     }
@@ -196,6 +199,11 @@ export const EvaluationResults: React.FC<EvaluationResultsProps> = ({
                   >
                     <RefreshCw className="w-3 h-3 text-amber-600" />
                     {language === 'ko' ? '동일 영상 고정 평점' : 'Static Rating (Exact Match)'}
+                  </span>
+                )}
+                {!evaluation.isCachedEvaluation && (
+                  <span className="px-2.5 py-0.5 bg-emerald-50 text-emerald-800 rounded text-[10px] font-bold border border-emerald-200">
+                    {language === 'ko' ? '새 영상 분석 완료' : 'Fresh Video Analysis'}
                   </span>
                 )}
                 <span className="px-2 py-0.5 bg-slate-100 text-slate-600 rounded text-[10px] font-semibold border border-slate-200">

@@ -1,20 +1,31 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Upload, Film, Play, Pause, Sparkles, Check, AlertCircle, FileVideo, Music2, Tag, MessageSquare, RotateCcw, Lightbulb } from 'lucide-react';
+import { Upload, Film, Play, Pause, Sparkles, Check, AlertCircle, FileVideo, Music2, Tag, MessageSquare, RotateCcw, Lightbulb, ShieldCheck } from 'lucide-react';
 import { getPresetReels } from '../data/presets';
 import { PresetReel, ReelEvaluation } from '../types';
 import { SafeZoneOverlay } from './SafeZoneOverlay';
 import { useLanguage } from '../i18n';
+import { createLocalEvaluation, VideoMetrics } from '../localFallback';
 
 interface VideoUploaderProps {
   onEvaluationComplete: (evaluation: ReelEvaluation) => void;
+  onVideoIdentityChange: () => void;
   isEvaluating: boolean;
   setIsEvaluating: (loading: boolean) => void;
   creatorHandle: string;
   defaultNiche: string;
 }
 
+const EVALUATION_CACHE_VERSION = 5;
+
+interface StoredEvaluation {
+  scoringVersion: number;
+  videoContentHash: string;
+  evaluation: ReelEvaluation;
+}
+
 export const VideoUploader: React.FC<VideoUploaderProps> = ({
   onEvaluationComplete,
+  onVideoIdentityChange,
   isEvaluating,
   setIsEvaluating,
   creatorHandle,
@@ -24,6 +35,8 @@ export const VideoUploader: React.FC<VideoUploaderProps> = ({
   const presetReels = getPresetReels(language);
   const [videoFile, setVideoFile] = useState<File | null>(null);
   const [videoUrl, setVideoUrl] = useState<string | null>(null);
+  const [videoContentHash, setVideoContentHash] = useState<string>('');
+  const [isFingerprinting, setIsFingerprinting] = useState<boolean>(false);
   const [videoTitle, setVideoTitle] = useState<string>('');
   const [duration, setDuration] = useState<number>(15);
   const [fileFormat, setFileFormat] = useState<string>('MP4');
@@ -57,6 +70,93 @@ export const VideoUploader: React.FC<VideoUploaderProps> = ({
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const fileSelectionRef = useRef<number>(0);
+
+  const checksumTable = useRef<Uint32Array | null>(null);
+
+  const getChecksumTable = () => {
+    if (checksumTable.current) return checksumTable.current;
+    const table = new Uint32Array(256);
+    for (let n = 0; n < 256; n += 1) {
+      let value = n;
+      for (let bit = 0; bit < 8; bit += 1) {
+        value = (value & 1) ? (0xedb88320 ^ (value >>> 1)) : (value >>> 1);
+      }
+      table[n] = value >>> 0;
+    }
+    checksumTable.current = table;
+    return table;
+  };
+
+  // Reads every byte without loading the whole video into memory. File names and
+  // timestamps are deliberately excluded, so renaming an unchanged video keeps
+  // its original evaluation while any byte-level edit creates a new identity.
+  const createContentFingerprint = async (file: File) => {
+    const table = getChecksumTable();
+    const reader = file.stream().getReader();
+    let crc = 0xffffffff;
+    let fnv = 0x811c9dc5;
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      for (let index = 0; index < value.length; index += 1) {
+        const byte = value[index];
+        crc = (crc >>> 8) ^ table[(crc ^ byte) & 0xff];
+        fnv = Math.imul(fnv ^ byte, 0x01000193) >>> 0;
+      }
+    }
+
+    return `${file.size}-${((crc ^ 0xffffffff) >>> 0).toString(16).padStart(8, '0')}-${fnv.toString(16).padStart(8, '0')}`;
+  };
+
+  const createEvaluationCacheKey = async (contentHash: string) => {
+    const context = JSON.stringify({
+      scoringVersion: EVALUATION_CACHE_VERSION,
+      contentHash,
+    });
+    const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(context));
+    return `previral:evaluation:v${EVALUATION_CACHE_VERSION}:${Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, '0')).join('')}`;
+  };
+
+  const readExactMatchEvaluation = (cacheKey: string, contentHash: string) => {
+    const cachedValue = localStorage.getItem(cacheKey);
+    if (!cachedValue) return null;
+
+    try {
+      const stored = JSON.parse(cachedValue) as StoredEvaluation;
+      if (
+        stored.scoringVersion !== EVALUATION_CACHE_VERSION ||
+        stored.videoContentHash !== contentHash ||
+        !stored.evaluation
+      ) {
+        localStorage.removeItem(cacheKey);
+        return null;
+      }
+      return stored.evaluation;
+    } catch {
+      localStorage.removeItem(cacheKey);
+      return null;
+    }
+  };
+
+  const storeEvaluation = (cacheKey: string, contentHash: string, evaluation: ReelEvaluation) => {
+    const stored: StoredEvaluation = {
+      scoringVersion: EVALUATION_CACHE_VERSION,
+      videoContentHash: contentHash,
+      evaluation: { ...evaluation, isCachedEvaluation: false },
+    };
+    localStorage.setItem(cacheKey, JSON.stringify(stored));
+  };
+
+  // Device media is requested only after an explicit user action. The browser's
+  // native picker grants access only to the file the user selects.
+  const openMediaPicker = () => {
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+      fileInputRef.current.click();
+    }
+  };
 
   // Handle local video file selection
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -76,7 +176,7 @@ export const VideoUploader: React.FC<VideoUploaderProps> = ({
 
   const MAX_FILE_SIZE_BYTES = 2.5 * 1024 * 1024 * 1024; // 2.5GB
 
-  const processSelectedFile = (file: File) => {
+  const processSelectedFile = async (file: File) => {
     if (file.size > MAX_FILE_SIZE_BYTES) {
       alert(
         language === 'ko'
@@ -85,20 +185,38 @@ export const VideoUploader: React.FC<VideoUploaderProps> = ({
       );
       return;
     }
+    const selectionId = ++fileSelectionRef.current;
+    onVideoIdentityChange();
     setSelectedPreset(null);
+    setVideoTitle('');
+    setVideoContentHash('');
+    setIsFingerprinting(true);
     setVideoFile(file);
+    if (videoUrl?.startsWith('blob:')) URL.revokeObjectURL(videoUrl);
     const url = URL.createObjectURL(file);
     setVideoUrl(url);
     setVideoTitle(file.name.replace(/\.[^/.]+$/, ''));
     setFileSizeMb(Number((file.size / (1024 * 1024)).toFixed(1)));
     const ext = file.name.split('.').pop()?.toUpperCase() || 'MP4';
     setFileFormat(ext);
+    try {
+      const fingerprint = await createContentFingerprint(file);
+      if (fileSelectionRef.current === selectionId) setVideoContentHash(fingerprint);
+    } catch (error) {
+      console.warn('Could not fingerprint the selected video:', error);
+      if (fileSelectionRef.current === selectionId) {
+        setVideoContentHash(`${file.size}-${file.lastModified}`);
+      }
+    } finally {
+      if (fileSelectionRef.current === selectionId) setIsFingerprinting(false);
+    }
   };
 
   // Handle Preset Reel Selection
   const handleSelectPreset = (preset: PresetReel) => {
     setSelectedPreset(preset);
     setVideoFile(null);
+    setVideoContentHash(`preset:${preset.id}`);
     setVideoUrl(preset.videoUrl);
     setVideoTitle(preset.title);
     setDuration(preset.duration);
@@ -129,28 +247,96 @@ export const VideoUploader: React.FC<VideoUploaderProps> = ({
     }
   };
 
-  // Extract base64 frame snapshots from video element for Gemini AI visual analysis
-  const captureFrameSnapshots = (): string[] => {
+  // Sample the actual footage for content-specific, measurable browser analysis.
+  const analyzeVideoFrames = async (): Promise<{ frameSnapshots: string[]; videoMetrics?: VideoMetrics }> => {
     const snapshots: string[] = [];
     try {
-      if (!videoRef.current || !canvasRef.current) return snapshots;
+      if (!videoRef.current || !canvasRef.current) return { frameSnapshots: snapshots };
 
       const video = videoRef.current;
       const canvas = canvasRef.current;
-      if (!canvas || typeof canvas.getContext !== 'function') return snapshots;
-
-      canvas.width = video.videoWidth || 640;
-      canvas.height = video.videoHeight || 360;
-      const ctx = canvas.getContext('2d');
-
-      if (ctx) {
-        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-        snapshots.push(canvas.toDataURL('image/jpeg', 0.8));
+      if (!canvas || typeof canvas.getContext !== 'function') return { frameSnapshots: snapshots };
+      if (video.readyState < 1) {
+        await new Promise<void>((resolve) => video.addEventListener('loadedmetadata', () => resolve(), { once: true }));
       }
+
+      const sourceWidth = video.videoWidth || 640;
+      const sourceHeight = video.videoHeight || 360;
+      canvas.width = 96;
+      canvas.height = Math.max(54, Math.round(96 * sourceHeight / sourceWidth));
+      const ctx = canvas.getContext('2d');
+      if (!ctx) return { frameSnapshots: snapshots };
+
+      const wasPaused = video.paused;
+      const originalTime = video.currentTime;
+      video.pause();
+      const durationValue = Math.max(0.1, video.duration || duration || 1);
+      const sampleCount = Math.min(16, Math.max(6, Math.ceil(durationValue / 2) + 1));
+      const sampleRatios = Array.from({ length: sampleCount }, (_, index) => 0.02 + (0.9 * index) / (sampleCount - 1));
+      const luminanceFrames: Uint8Array[] = [];
+      const contrastValues: number[] = [];
+      const brightnessValues: number[] = [];
+
+      for (const [index, ratio] of sampleRatios.entries()) {
+        const target = Math.min(Math.max(0, durationValue * ratio), Math.max(0, durationValue - 0.05));
+        if (Math.abs(video.currentTime - target) > 0.02) {
+          await new Promise<void>((resolve) => {
+            const finish = () => resolve();
+            video.addEventListener('seeked', finish, { once: true });
+            video.currentTime = target;
+            window.setTimeout(finish, 1500);
+          });
+        }
+        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+        const pixels = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
+        const luminance = new Uint8Array(canvas.width * canvas.height);
+        let sum = 0;
+        for (let pixel = 0, point = 0; pixel < pixels.length; pixel += 4, point += 1) {
+          const value = Math.round(pixels[pixel] * 0.2126 + pixels[pixel + 1] * 0.7152 + pixels[pixel + 2] * 0.0722);
+          luminance[point] = value;
+          sum += value;
+        }
+        const mean = sum / luminance.length;
+        let variance = 0;
+        for (const value of luminance) variance += (value - mean) ** 2;
+        luminanceFrames.push(luminance);
+        brightnessValues.push(mean / 255 * 100);
+        contrastValues.push(Math.min(100, Math.sqrt(variance / luminance.length) / 64 * 100));
+        if (index === 0 || index === Math.floor(sampleRatios.length / 2) || index === sampleRatios.length - 1) {
+          snapshots.push(canvas.toDataURL('image/jpeg', 0.78));
+        }
+      }
+
+      const frameDifference = (left: Uint8Array, right: Uint8Array) => {
+        let difference = 0;
+        for (let index = 0; index < left.length; index += 1) difference += Math.abs(left[index] - right[index]);
+        return difference / left.length / 255 * 100;
+      };
+      const consecutiveDifferences = luminanceFrames.slice(1).map((frame, index) => frameDifference(luminanceFrames[index], frame));
+      const startEndDifference = frameDifference(luminanceFrames[0], luminanceFrames[luminanceFrames.length - 1]);
+      const earlyDifference = consecutiveDifferences[0] || 0;
+      const payoffDifference = consecutiveDifferences[consecutiveDifferences.length - 1] || 0;
+      const changingIntervals = consecutiveDifferences.filter((value) => value >= 4).length;
+      const videoMetrics: VideoMetrics = {
+        width: sourceWidth,
+        height: sourceHeight,
+        motionScore: Math.round(Math.min(100, (consecutiveDifferences.reduce((sum, value) => sum + value, 0) / consecutiveDifferences.length) * 4)),
+        contrastScore: Math.round(contrastValues.reduce((sum, value) => sum + value, 0) / contrastValues.length),
+        brightnessScore: Math.round(brightnessValues.reduce((sum, value) => sum + value, 0) / brightnessValues.length),
+        loopSimilarityScore: Math.round(Math.max(0, 100 - startEndDifference * 4)),
+        earlyMotionScore: Math.round(Math.min(100, earlyDifference * 5)),
+        changeFrequencyScore: Math.round(changingIntervals / Math.max(1, consecutiveDifferences.length) * 100),
+        payoffChangeScore: Math.round(Math.min(100, payoffDifference * 5)),
+        sampledFrames: luminanceFrames.length,
+      };
+
+      video.currentTime = originalTime;
+      if (!wasPaused) void video.play();
+      return { frameSnapshots: snapshots, videoMetrics };
     } catch (err) {
       console.warn('Could not capture video frame snapshot:', err);
     }
-    return snapshots;
+    return { frameSnapshots: snapshots };
   };
 
   // Trigger Reel Evaluation
@@ -176,8 +362,10 @@ export const VideoUploader: React.FC<VideoUploaderProps> = ({
         : 'Scanning 0-3s Zero-Second Hook & visual contrast...'
     );
 
+    let analyzedMetrics: VideoMetrics | undefined;
     try {
-      const frameSnapshots = captureFrameSnapshots();
+      const { frameSnapshots, videoMetrics } = await analyzeVideoFrames();
+      analyzedMetrics = videoMetrics;
 
       setTimeout(
         () =>
@@ -207,18 +395,35 @@ export const VideoUploader: React.FC<VideoUploaderProps> = ({
         2400
       );
 
+      const auditInput = {
+        title: videoTitle || (language === 'ko' ? '업로드된 릴스' : 'Uploaded Reel'),
+        durationSeconds: duration,
+        fileFormat,
+        fileSizeMb,
+        niche,
+        captionInput,
+        videoConcept,
+        audioType,
+        videoContentHash: videoContentHash || `preset:${selectedPreset?.id || 'unknown'}`,
+        videoMetrics,
+        language,
+      };
+
+      const cacheKey = await createEvaluationCacheKey(auditInput.videoContentHash);
+      const cachedEvaluation = readExactMatchEvaluation(cacheKey, auditInput.videoContentHash);
+      if (cachedEvaluation) {
+        onEvaluationComplete({
+          ...cachedEvaluation,
+          title: auditInput.title,
+          isCachedEvaluation: true,
+        });
+        return;
+      }
       const response = await fetch('/api/evaluate-reel', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          title: videoTitle || (language === 'ko' ? '업로드된 릴스' : 'Uploaded Reel'),
-          durationSeconds: duration,
-          fileFormat,
-          fileSizeMb,
-          niche,
-          captionInput,
-          videoConcept,
-          audioType,
+          ...auditInput,
           frameSnapshots,
           hasWatermark: false,
           detectedAudioSilence: false,
@@ -226,10 +431,31 @@ export const VideoUploader: React.FC<VideoUploaderProps> = ({
         }),
       });
 
-      const evaluationData: ReelEvaluation = await response.json();
-      onEvaluationComplete(evaluationData);
+      const evaluationData: ReelEvaluation = response.ok
+        ? await response.json()
+        : createLocalEvaluation(auditInput);
+      const freshEvaluation = { ...evaluationData, isCachedEvaluation: false };
+      storeEvaluation(cacheKey, auditInput.videoContentHash, freshEvaluation);
+      onEvaluationComplete(freshEvaluation);
     } catch (err) {
-      console.error('Failed to evaluate reel:', err);
+      const evaluationData = createLocalEvaluation({
+        title: videoTitle || (language === 'ko' ? '업로드된 릴스' : 'Uploaded Reel'),
+        durationSeconds: duration,
+        fileFormat,
+        fileSizeMb,
+        niche,
+        captionInput,
+        videoConcept,
+        audioType,
+        videoContentHash,
+        videoMetrics: analyzedMetrics,
+        language,
+      });
+      if (videoContentHash) {
+        const cacheKey = await createEvaluationCacheKey(videoContentHash);
+        storeEvaluation(cacheKey, videoContentHash, evaluationData);
+      }
+      onEvaluationComplete({ ...evaluationData, isCachedEvaluation: false });
     } finally {
       setIsEvaluating(false);
     }
@@ -281,23 +507,33 @@ export const VideoUploader: React.FC<VideoUploaderProps> = ({
             <div
               onDragOver={(e) => e.preventDefault()}
               onDrop={handleDrop}
-              onClick={() => fileInputRef.current?.click()}
-              className="border-2 border-dashed border-gray-200 hover:border-indigo-500 bg-slate-50/70 hover:bg-slate-50 rounded-2xl p-8 flex flex-col items-center justify-center text-center cursor-pointer transition-all group min-h-[320px]"
+              className="border-2 border-dashed border-gray-200 hover:border-indigo-500 bg-slate-50/70 hover:bg-slate-50 rounded-2xl p-8 flex flex-col items-center justify-center text-center transition-all group min-h-[320px]"
             >
               <input
                 ref={fileInputRef}
                 type="file"
-                accept="video/*,.mp4,.mov,.avi,.webm,.mkv"
+                accept="video/*"
                 onChange={handleFileChange}
                 className="hidden"
+                aria-label={t('browseMedia')}
               />
               <div className="w-16 h-16 rounded-2xl bg-indigo-50 text-indigo-600 border border-indigo-100 flex items-center justify-center mb-4 group-hover:scale-110 transition-transform shadow-sm">
                 <FileVideo className="w-8 h-8" />
               </div>
-              <h3 className="font-bold text-slate-800 text-base">
-                {t('dragDropTitle')} <span className="text-indigo-600 underline">{t('browseFile')}</span>
-              </h3>
+              <h3 className="font-bold text-slate-800 text-base">{t('dragDropTitle')}</h3>
               <p className="text-xs text-slate-500 mt-1 max-w-sm">{t('dragDropSub')}</p>
+              <button
+                type="button"
+                onClick={openMediaPicker}
+                className="mt-4 inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-indigo-600 px-5 py-2.5 text-sm font-bold text-white shadow-sm transition-colors hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2"
+              >
+                <FileVideo className="h-4 w-4" />
+                {t('browseMedia')}
+              </button>
+              <p className="mt-3 flex max-w-sm items-start justify-center gap-1.5 text-[11px] leading-relaxed text-slate-500">
+                <ShieldCheck className="mt-0.5 h-3.5 w-3.5 shrink-0 text-green-600" />
+                <span>{t('mediaPermissionNotice')}</span>
+              </p>
               <div className="flex items-center gap-2 mt-4 text-[11px] text-slate-500 font-medium flex-wrap justify-center">
                 <span className="flex items-center gap-1"><Check className="w-3.5 h-3.5 text-green-600" /> {t('check1080p')}</span>
                 <span className="flex items-center gap-1"><Check className="w-3.5 h-3.5 text-green-600" /> {t('checkHook')}</span>
@@ -354,6 +590,9 @@ export const VideoUploader: React.FC<VideoUploaderProps> = ({
                   onClick={() => {
                     setVideoUrl(null);
                     setVideoFile(null);
+                    setVideoContentHash('');
+                    setVideoTitle('');
+                    onVideoIdentityChange();
                     setSelectedPreset(null);
                     setVideoConcept('');
                   }}
@@ -497,10 +736,12 @@ export const VideoUploader: React.FC<VideoUploaderProps> = ({
           <div className="pt-2">
             <button
               onClick={handleEvaluate}
-              disabled={isEvaluating || (!videoUrl && !selectedPreset)}
+              disabled={isEvaluating || isFingerprinting || (!videoUrl && !selectedPreset) || (!selectedPreset && !videoContentHash)}
               className="w-full bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white font-semibold text-sm py-3.5 px-6 rounded-xl shadow-lg shadow-indigo-100 transition-all flex items-center justify-center gap-2 hover:scale-[1.01] active:scale-[0.99]"
             >
-              {isEvaluating ? (
+              {isFingerprinting ? (
+                <><RotateCcw className="w-4 h-4 animate-spin" /> {language === 'ko' ? '영상 변경 여부 확인 중...' : 'Checking video identity...'}</>
+              ) : isEvaluating ? (
                 <>
                   <Sparkles className="w-5 h-5 animate-spin" />
                   <span>{evalProgressText}</span>
