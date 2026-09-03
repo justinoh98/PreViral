@@ -15,7 +15,7 @@ interface VideoUploaderProps {
   defaultNiche: string;
 }
 
-const EVALUATION_CACHE_VERSION = 5;
+const EVALUATION_CACHE_VERSION = 8;
 
 interface StoredEvaluation {
   scoringVersion: number;
@@ -205,7 +205,12 @@ export const VideoUploader: React.FC<VideoUploaderProps> = ({
     } catch (error) {
       console.warn('Could not fingerprint the selected video:', error);
       if (fileSelectionRef.current === selectionId) {
-        setVideoContentHash(`${file.size}-${file.lastModified}`);
+        setVideoContentHash('');
+        alert(
+          language === 'ko'
+            ? '영상 동일성을 정확히 확인할 수 없습니다. 파일을 다시 선택해 주세요.'
+            : 'The video could not be verified for an exact match. Please select the file again.'
+        );
       }
     } finally {
       if (fileSelectionRef.current === selectionId) setIsFingerprinting(false);
@@ -247,23 +252,20 @@ export const VideoUploader: React.FC<VideoUploaderProps> = ({
     }
   };
 
-  // Sample the actual footage for content-specific, measurable browser analysis.
+  // Deep temporal scan: dense opening coverage plus full-timeline sampling.
   const analyzeVideoFrames = async (): Promise<{ frameSnapshots: string[]; videoMetrics?: VideoMetrics }> => {
     const snapshots: string[] = [];
     try {
       if (!videoRef.current || !canvasRef.current) return { frameSnapshots: snapshots };
-
       const video = videoRef.current;
       const canvas = canvasRef.current;
-      if (!canvas || typeof canvas.getContext !== 'function') return { frameSnapshots: snapshots };
       if (video.readyState < 1) {
         await new Promise<void>((resolve) => video.addEventListener('loadedmetadata', () => resolve(), { once: true }));
       }
-
       const sourceWidth = video.videoWidth || 640;
       const sourceHeight = video.videoHeight || 360;
-      canvas.width = 96;
-      canvas.height = Math.max(54, Math.round(96 * sourceHeight / sourceWidth));
+      canvas.width = 160;
+      canvas.height = Math.max(90, Math.round(160 * sourceHeight / sourceWidth));
       const ctx = canvas.getContext('2d');
       if (!ctx) return { frameSnapshots: snapshots };
 
@@ -271,40 +273,71 @@ export const VideoUploader: React.FC<VideoUploaderProps> = ({
       const originalTime = video.currentTime;
       video.pause();
       const durationValue = Math.max(0.1, video.duration || duration || 1);
-      const sampleCount = Math.min(16, Math.max(6, Math.ceil(durationValue / 2) + 1));
-      const sampleRatios = Array.from({ length: sampleCount }, (_, index) => 0.02 + (0.9 * index) / (sampleCount - 1));
+      const uniformCount = Math.min(60, Math.max(18, Math.ceil(durationValue / 0.75) + 1));
+      const openingTimes = [0.02, 0.15, 0.35, 0.6, 0.9, 1.3, 1.8, 2.4, 3].filter((time) => time < durationValue);
+      const uniformTimes = Array.from({ length: uniformCount }, (_, index) =>
+        0.02 + ((durationValue - 0.07) * index) / Math.max(1, uniformCount - 1)
+      );
+      const sampleTimes = [...new Set([...openingTimes, ...uniformTimes].map((time) => Number(time.toFixed(3))))]
+        .sort((left, right) => left - right)
+        .slice(0, 68);
       const luminanceFrames: Uint8Array[] = [];
       const contrastValues: number[] = [];
       const brightnessValues: number[] = [];
+      const sharpnessValues: number[] = [];
+      const colorfulnessValues: number[] = [];
+      const average = (values: number[]) => values.reduce((sum, value) => sum + value, 0) / Math.max(1, values.length);
 
-      for (const [index, ratio] of sampleRatios.entries()) {
-        const target = Math.min(Math.max(0, durationValue * ratio), Math.max(0, durationValue - 0.05));
+      for (const [index, sampleTime] of sampleTimes.entries()) {
+        const target = Math.min(Math.max(0, sampleTime), Math.max(0, durationValue - 0.05));
         if (Math.abs(video.currentTime - target) > 0.02) {
           await new Promise<void>((resolve) => {
-            const finish = () => resolve();
+            let settled = false;
+            const finish = () => {
+              if (settled) return;
+              settled = true;
+              resolve();
+            };
             video.addEventListener('seeked', finish, { once: true });
             video.currentTime = target;
-            window.setTimeout(finish, 1500);
+            window.setTimeout(finish, 1200);
           });
         }
         ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
         const pixels = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
         const luminance = new Uint8Array(canvas.width * canvas.height);
         let sum = 0;
+        let saturationSum = 0;
         for (let pixel = 0, point = 0; pixel < pixels.length; pixel += 4, point += 1) {
-          const value = Math.round(pixels[pixel] * 0.2126 + pixels[pixel + 1] * 0.7152 + pixels[pixel + 2] * 0.0722);
+          const red = pixels[pixel];
+          const green = pixels[pixel + 1];
+          const blue = pixels[pixel + 2];
+          const value = Math.round(red * 0.2126 + green * 0.7152 + blue * 0.0722);
           luminance[point] = value;
           sum += value;
+          const maximum = Math.max(red, green, blue);
+          const minimum = Math.min(red, green, blue);
+          saturationSum += maximum === 0 ? 0 : (maximum - minimum) / maximum;
         }
         const mean = sum / luminance.length;
         let variance = 0;
-        for (const value of luminance) variance += (value - mean) ** 2;
+        let edgeDifference = 0;
+        let edgeSamples = 0;
+        for (let y = 0; y < canvas.height; y += 1) {
+          for (let x = 0; x < canvas.width; x += 1) {
+            const point = y * canvas.width + x;
+            variance += (luminance[point] - mean) ** 2;
+            if (x > 0) { edgeDifference += Math.abs(luminance[point] - luminance[point - 1]); edgeSamples += 1; }
+            if (y > 0) { edgeDifference += Math.abs(luminance[point] - luminance[point - canvas.width]); edgeSamples += 1; }
+          }
+        }
         luminanceFrames.push(luminance);
         brightnessValues.push(mean / 255 * 100);
         contrastValues.push(Math.min(100, Math.sqrt(variance / luminance.length) / 64 * 100));
-        if (index === 0 || index === Math.floor(sampleRatios.length / 2) || index === sampleRatios.length - 1) {
-          snapshots.push(canvas.toDataURL('image/jpeg', 0.78));
-        }
+        sharpnessValues.push(Math.min(100, edgeDifference / Math.max(1, edgeSamples) / 32 * 100));
+        colorfulnessValues.push(Math.min(100, saturationSum / luminance.length * 125));
+        const snapshotStride = Math.max(1, Math.floor(sampleTimes.length / 8));
+        if (index % snapshotStride === 0 || index === sampleTimes.length - 1) snapshots.push(canvas.toDataURL('image/jpeg', 0.82));
       }
 
       const frameDifference = (left: Uint8Array, right: Uint8Array) => {
@@ -312,29 +345,37 @@ export const VideoUploader: React.FC<VideoUploaderProps> = ({
         for (let index = 0; index < left.length; index += 1) difference += Math.abs(left[index] - right[index]);
         return difference / left.length / 255 * 100;
       };
-      const consecutiveDifferences = luminanceFrames.slice(1).map((frame, index) => frameDifference(luminanceFrames[index], frame));
+      const differences = luminanceFrames.slice(1).map((frame, index) => frameDifference(luminanceFrames[index], frame));
+      const earlyCount = Math.max(2, sampleTimes.filter((time) => time <= 3).length);
+      const earlyDifference = average(differences.slice(0, earlyCount - 1));
+      const payoffDifference = average(differences.slice(-Math.max(2, Math.ceil(differences.length * 0.15))));
       const startEndDifference = frameDifference(luminanceFrames[0], luminanceFrames[luminanceFrames.length - 1]);
-      const earlyDifference = consecutiveDifferences[0] || 0;
-      const payoffDifference = consecutiveDifferences[consecutiveDifferences.length - 1] || 0;
-      const changingIntervals = consecutiveDifferences.filter((value) => value >= 4).length;
+      const brightnessMean = average(brightnessValues);
+      const brightnessDeviation = Math.sqrt(average(brightnessValues.map((value) => (value - brightnessMean) ** 2)));
       const videoMetrics: VideoMetrics = {
         width: sourceWidth,
         height: sourceHeight,
-        motionScore: Math.round(Math.min(100, (consecutiveDifferences.reduce((sum, value) => sum + value, 0) / consecutiveDifferences.length) * 4)),
-        contrastScore: Math.round(contrastValues.reduce((sum, value) => sum + value, 0) / contrastValues.length),
-        brightnessScore: Math.round(brightnessValues.reduce((sum, value) => sum + value, 0) / brightnessValues.length),
+        motionScore: Math.round(Math.min(100, average(differences) * 5)),
+        contrastScore: Math.round(average(contrastValues)),
+        brightnessScore: Math.round(brightnessMean),
         loopSimilarityScore: Math.round(Math.max(0, 100 - startEndDifference * 4)),
-        earlyMotionScore: Math.round(Math.min(100, earlyDifference * 5)),
-        changeFrequencyScore: Math.round(changingIntervals / Math.max(1, consecutiveDifferences.length) * 100),
-        payoffChangeScore: Math.round(Math.min(100, payoffDifference * 5)),
+        earlyMotionScore: Math.round(Math.min(100, earlyDifference * 6)),
+        changeFrequencyScore: Math.round(differences.filter((value) => value >= 2.2).length / Math.max(1, differences.length) * 100),
+        payoffChangeScore: Math.round(Math.min(100, payoffDifference * 6)),
+        sceneCutScore: Math.round(Math.min(100, differences.filter((value) => value >= 8).length / Math.max(1, differences.length) * 300)),
+        staticFrameRatio: Math.round(differences.filter((value) => value < 1.15).length / Math.max(1, differences.length) * 100),
+        sharpnessScore: Math.round(average(sharpnessValues)),
+        colorfulnessScore: Math.round(average(colorfulnessValues)),
+        exposureStabilityScore: Math.round(Math.max(0, 100 - brightnessDeviation * 3)),
+        blackFrameRatio: Math.round(brightnessValues.filter((value) => value < 8).length / Math.max(1, brightnessValues.length) * 100),
         sampledFrames: luminanceFrames.length,
       };
 
       video.currentTime = originalTime;
       if (!wasPaused) void video.play();
-      return { frameSnapshots: snapshots, videoMetrics };
+      return { frameSnapshots: snapshots.slice(0, 9), videoMetrics };
     } catch (err) {
-      console.warn('Could not capture video frame snapshot:', err);
+      console.warn('Could not complete deep video scan:', err);
     }
     return { frameSnapshots: snapshots };
   };

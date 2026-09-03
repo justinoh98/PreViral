@@ -206,6 +206,7 @@ async function startServer() {
         videoConcept,
         audioType,
         videoContentHash,
+        videoMetrics,
         frameSnapshots,
         hasWatermark,
         detectedAudioSilence,
@@ -276,17 +277,17 @@ async function startServer() {
       // Prepare the OpenAI evaluation prompt.
       const promptText = `You are a strictly objective, uncompromising Instagram Reels & Short-Form Video Algorithm Auditor in 2026.
 You are evaluating a Reel prior to publishing. Your evaluation MUST be strictly objective, critical, and evidence-based. 
-CRITICAL EVALUATION MANDATE:
+PROFESSIONAL EVALUATION MANDATE:
 - Use only measurable visual evidence, supplied context, and the rubric below. Do not infer facts that are not visible or provided.
 - Separate observations from predictions. Never present an algorithm forecast as a verified outcome.
-- Do NOT give polite, promotional, or artificially inflated ratings. Apply identical evidence thresholds to every creator and niche.
+- Do not give polite, promotional, or artificially inflated ratings, but do not manufacture deductions merely to appear strict. Apply identical evidence thresholds to every creator and niche.
 - Every deduction and every positive score must be traceable to a specific observed frame, timestamp, measurable property, or supplied context.
-- If evidence is unavailable, state that it was not verifiable and score conservatively; never fabricate cuts, silence, captions, resolution, safe-zone placement, narrative beats, or loop quality.
+- If evidence is unavailable, state that it was not verifiable and treat it as unknown rather than automatically failed; never fabricate cuts, silence, captions, resolution, safe-zone placement, narrative beats, or loop quality.
 - Treat the title and filename as display identifiers only. They must never raise, lower, or otherwise influence any rating.
-- Begin each criterion at 0, then award points only for verified evidence. Do not begin from 5 and deduct.
-- Cap a criterion at 2.5/5 when its central requirement is absent or unverified. A strong secondary trait cannot cancel a failed core requirement.
+- Use a professional 1-to-5 scale where 3 represents competent average execution, below 3 reflects observable weaknesses, and above 3 reflects verified strengths.
+- Cap a criterion only when an observed core requirement actually fails. Missing optional context may limit confidence, but must not force otherwise competent footage below average.
 - Scores above 4.0 require clear evidence that every listed requirement in that criterion is satisfied. Scores above 4.5 must be exceptional and rare.
-- Apply deductions cumulatively. Do not soften a low score to be encouraging, visually balanced, or polite.
+- Apply material deductions cumulatively, in proportion to their likely retention impact. Do not double-penalize the same defect across multiple criteria.
 - Act as an algorithm auditor that penalizes flaws heavily (e.g. dead air >0.3s, lack of instant visual motion at second 0, missing captions, low contrast, absent CTA, long setup delay).
 - Highlight specific defects and weaknesses explicitly in \`criticalDefectsIdentified\`.
 ${languageInstruction}
@@ -305,6 +306,8 @@ Reel Metadata:
 - Creator's Intended Video Concept & Portrayal: "${videoConcept ? videoConcept : 'Not specified'}"
 - Audio Track Type: "${audioType || 'Trending Audio'}"
 - Automated Checks: Watermark suspected = ${hasWatermark ? 'Yes' : 'No'}, Initial silence = ${detectedAudioSilence ? 'Yes' : 'No'}.
+- Deep visual scan metrics: ${videoMetrics ? JSON.stringify(videoMetrics) : 'Unavailable'}.
+- The attached frames cover the opening densely and the remaining timeline at regular intervals. Evaluate them in chronological order and reconcile them with the measured scan metrics.
 
 ${
   videoConcept && videoConcept.trim().length > 0
@@ -338,9 +341,9 @@ Return a STRICT JSON response adhering to this JSON Schema.`;
 
       const content: Array<Record<string, string>> = [{ type: 'input_text', text: promptText }];
       if (Array.isArray(frameSnapshots)) {
-        for (const snapshot of frameSnapshots.slice(0, 3)) {
+        for (const snapshot of frameSnapshots.slice(0, 9)) {
           if (typeof snapshot === 'string' && snapshot.startsWith('data:image/')) {
-            content.push({ type: 'input_image', image_url: snapshot, detail: 'low' });
+            content.push({ type: 'input_image', image_url: snapshot, detail: 'high' });
           }
         }
       }

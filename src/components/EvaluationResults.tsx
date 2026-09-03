@@ -201,11 +201,6 @@ export const EvaluationResults: React.FC<EvaluationResultsProps> = ({
                     {language === 'ko' ? '동일 영상 고정 평점' : 'Static Rating (Exact Match)'}
                   </span>
                 )}
-                {!evaluation.isCachedEvaluation && (
-                  <span className="px-2.5 py-0.5 bg-emerald-50 text-emerald-800 rounded text-[10px] font-bold border border-emerald-200">
-                    {language === 'ko' ? '새 영상 분석 완료' : 'Fresh Video Analysis'}
-                  </span>
-                )}
                 <span className="px-2 py-0.5 bg-slate-100 text-slate-600 rounded text-[10px] font-semibold border border-slate-200">
                   {language === 'ko' ? '가중치 루브릭 적용' : 'Objective Weighted Rubric'}
                 </span>
