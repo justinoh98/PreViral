@@ -15,7 +15,7 @@ interface VideoUploaderProps {
   defaultNiche: string;
 }
 
-const EVALUATION_CACHE_VERSION = 7;
+const EVALUATION_CACHE_VERSION = 8;
 
 interface StoredEvaluation {
   scoringVersion: number;
