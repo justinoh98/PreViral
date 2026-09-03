@@ -206,6 +206,7 @@ async function startServer() {
         videoConcept,
         audioType,
         videoContentHash,
+        videoMetrics,
         frameSnapshots,
         hasWatermark,
         detectedAudioSilence,
@@ -305,6 +306,8 @@ Reel Metadata:
 - Creator's Intended Video Concept & Portrayal: "${videoConcept ? videoConcept : 'Not specified'}"
 - Audio Track Type: "${audioType || 'Trending Audio'}"
 - Automated Checks: Watermark suspected = ${hasWatermark ? 'Yes' : 'No'}, Initial silence = ${detectedAudioSilence ? 'Yes' : 'No'}.
+- Deep visual scan metrics: ${videoMetrics ? JSON.stringify(videoMetrics) : 'Unavailable'}.
+- The attached frames cover the opening densely and the remaining timeline at regular intervals. Evaluate them in chronological order and reconcile them with the measured scan metrics.
 
 ${
   videoConcept && videoConcept.trim().length > 0
@@ -338,9 +341,9 @@ Return a STRICT JSON response adhering to this JSON Schema.`;
 
       const content: Array<Record<string, string>> = [{ type: 'input_text', text: promptText }];
       if (Array.isArray(frameSnapshots)) {
-        for (const snapshot of frameSnapshots.slice(0, 3)) {
+        for (const snapshot of frameSnapshots.slice(0, 9)) {
           if (typeof snapshot === 'string' && snapshot.startsWith('data:image/')) {
-            content.push({ type: 'input_image', image_url: snapshot, detail: 'low' });
+            content.push({ type: 'input_image', image_url: snapshot, detail: 'high' });
           }
         }
       }

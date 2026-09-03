@@ -25,6 +25,12 @@ export type VideoMetrics = {
   earlyMotionScore: number;
   changeFrequencyScore: number;
   payoffChangeScore: number;
+  sceneCutScore: number;
+  staticFrameRatio: number;
+  sharpnessScore: number;
+  colorfulnessScore: number;
+  exposureStabilityScore: number;
+  blackFrameRatio: number;
   sampledFrames: number;
 };
 
@@ -38,37 +44,48 @@ export function createLocalEvaluation(input: AuditInput): ReelEvaluation {
   // Browser-only fallback: score only signals that are actually available.
   // Unknown visual/audio qualities receive neutral-conservative values rather
   // than invented positive observations.
-  const motionFactor = metrics ? metrics.motionScore / 100 : 0.4;
-  const contrastFactor = metrics ? metrics.contrastScore / 100 : 0.4;
-  const earlyMotionFactor = metrics ? metrics.earlyMotionScore / 100 : 0.35;
-  const changeFrequencyFactor = metrics ? metrics.changeFrequencyScore / 100 : 0.35;
-  const payoffFactor = metrics ? metrics.payoffChangeScore / 100 : 0.35;
-  let hookStars = 0.5 + earlyMotionFactor * 3.2 + contrastFactor * 0.4 + (missingCaption ? 0 : 0.7);
+  const factor = (value: number | undefined, fallback = 35) => (value ?? fallback) / 100;
+  const motionFactor = factor(metrics?.motionScore, 40);
+  const contrastFactor = factor(metrics?.contrastScore, 40);
+  const earlyMotionFactor = factor(metrics?.earlyMotionScore);
+  const changeFrequencyFactor = factor(metrics?.changeFrequencyScore);
+  const payoffFactor = factor(metrics?.payoffChangeScore);
+  const sceneCutFactor = factor(metrics?.sceneCutScore);
+  const sharpnessFactor = factor(metrics?.sharpnessScore, 40);
+  const colorfulnessFactor = factor(metrics?.colorfulnessScore, 40);
+  const exposureFactor = factor(metrics?.exposureStabilityScore, 40);
+  const staticPenalty = factor(metrics?.staticFrameRatio, 50);
+  const blackFramePenalty = factor(metrics?.blackFrameRatio, 0);
+
+  let hookStars = 0.35 + earlyMotionFactor * 2.7 + contrastFactor * 0.55 + sharpnessFactor * 0.35
+    + (missingCaption ? 0 : 0.65) - blackFramePenalty * 1.4;
   if (missingCaption) hookStars = Math.min(hookStars, 2.3);
   if ((metrics?.earlyMotionScore ?? 0) < 35) hookStars = Math.min(hookStars, 2.5);
-  hookStars = Number(Math.max(0.5, Math.min(5, hookStars)).toFixed(1));
+  hookStars = Number(Math.max(0.5, Math.min(5, hookStars)).toFixed(2));
   const durationPenalty = input.durationSeconds <= 15 ? 0 : input.durationSeconds <= 25 ? 0.3 : 0.7;
-  let pacingStars = 0.5 + changeFrequencyFactor * 3.3 + motionFactor * 0.7 - durationPenalty;
+  let pacingStars = 0.35 + changeFrequencyFactor * 2.35 + motionFactor * 0.75 + sceneCutFactor * 0.8
+    - staticPenalty * 0.8 - durationPenalty;
   if ((metrics?.changeFrequencyScore ?? 0) < 50) pacingStars = Math.min(pacingStars, 2.4);
-  pacingStars = Number(Math.max(0.5, Math.min(5, pacingStars)).toFixed(1));
-  let narrativeStars = 0.7 + payoffFactor * 2.8 + (missingConcept ? 0 : 1.0);
+  pacingStars = Number(Math.max(0.5, Math.min(5, pacingStars)).toFixed(2));
+  let narrativeStars = 0.55 + payoffFactor * 2.45 + changeFrequencyFactor * 0.35 + (missingConcept ? 0 : 1.0);
   if (missingConcept) narrativeStars = Math.min(narrativeStars, 2.2);
   if ((metrics?.payoffChangeScore ?? 0) < 30) narrativeStars = Math.min(narrativeStars, 2.5);
-  narrativeStars = Number(Math.max(0.5, Math.min(5, narrativeStars)).toFixed(1));
+  narrativeStars = Number(Math.max(0.5, Math.min(5, narrativeStars)).toFixed(2));
   // Frame similarity alone does not prove a seamless audio loop or a rewatch trigger.
-  const loopStars = Number(Math.max(0.5, Math.min(3.8, 0.6 + (metrics?.loopSimilarityScore ?? 30) / 100 * 3.2)).toFixed(1));
+  const loopStars = Number(Math.max(0.5, Math.min(3.8, 0.45 + factor(metrics?.loopSimilarityScore, 30) * 3.15)).toFixed(2));
   const resolutionPoints = metrics ? (metrics.width >= 1080 && metrics.height >= 1080 ? 1.8 : metrics.width >= 720 ? 0.6 : 0.1) : 0.2;
   const portraitPoints = metrics && metrics.height > metrics.width ? 0.8 : 0.1;
   const shareabilityPoints = (missingConcept ? 0 : 0.3) + (missingCaption ? 0 : 0.3);
-  let techStars = 0.8 + resolutionPoints + portraitPoints + shareabilityPoints;
+  let techStars = 0.35 + resolutionPoints + portraitPoints + shareabilityPoints
+    + sharpnessFactor * 0.55 + colorfulnessFactor * 0.25 + exposureFactor * 0.25 - blackFramePenalty;
   if (!metrics || metrics.width < 1080 || metrics.height < 1080) techStars = Math.min(techStars, 2.6);
-  techStars = Number(Math.max(0.5, Math.min(5, techStars)).toFixed(1));
+  techStars = Number(Math.max(0.5, Math.min(5, techStars)).toFixed(2));
   // PDF rubric weights: Hook 30%, Pacing 25%, Narrative/Payoff 20%,
   // Loop/Rewatch 10%, Quality/Shareability 15%.
   const failedCorePillars = [hookStars, pacingStars, narrativeStars].filter((score) => score < 2.5).length;
   const evidencePenalty = failedCorePillars * 0.15 + (missingCaption ? 0.1 : 0) + (missingConcept ? 0.1 : 0);
   const weightedScore = hookStars * 0.3 + pacingStars * 0.25 + narrativeStars * 0.2 + loopStars * 0.1 + techStars * 0.15;
-  const stars = Number(Math.max(0.5, weightedScore - evidencePenalty).toFixed(1));
+  const stars = Number(Math.max(0.5, weightedScore - evidencePenalty).toFixed(2));
   const verdict = stars >= 4.2 ? 'Viral Contender' : stars >= 3.5 ? 'Strong Growth' : stars >= 2.8 ? 'Moderate Retention' : 'High Skip Risk';
   const evidenceLimit = metrics
     ? (isKo
@@ -91,11 +108,11 @@ export function createLocalEvaluation(input: AuditInput): ReelEvaluation {
     audioType: input.audioType,
     timestamp: new Date().toISOString(),
     overallStars: stars,
-    overallScorePercent: Math.round(stars * 20),
+    overallScorePercent: Math.round(weightedScore * 20 - evidencePenalty * 20),
     overallVerdict: verdict,
     expectedSkipRatePercent: Math.min(65, Math.max(12, Math.round(50 - stars * 7))),
     followerGrowthPotentialPercent: Math.round(stars * 18 + 5),
-    nonFollowerInterestStars: Number((stars * 0.95).toFixed(1)),
+    nonFollowerInterestStars: Number((stars * 0.95).toFixed(2)),
     shareabilitySendScore: Math.round(stars * 18.5),
     criticalDefectsIdentified: [
       ...(missingCaption
@@ -128,7 +145,7 @@ export function createLocalEvaluation(input: AuditInput): ReelEvaluation {
         deadAirDetectedSec: 0,
         patternInterruptsCount: 0,
         verdict: metrics
-          ? (isKo ? `약 2초 간격 변화 충족률 ${metrics.changeFrequencyScore}/100, 전체 움직임 ${metrics.motionScore}/100.` : `Approx. 2-second change compliance ${metrics.changeFrequencyScore}/100; overall motion ${metrics.motionScore}/100.`)
+          ? (isKo ? `변화 충족률 ${metrics.changeFrequencyScore}/100, 움직임 ${metrics.motionScore}/100, 정적 구간 ${metrics.staticFrameRatio}%.` : `Change compliance ${metrics.changeFrequencyScore}/100; motion ${metrics.motionScore}/100; static intervals ${metrics.staticFrameRatio}%.`)
           : (isKo ? `재생 시간 ${input.durationSeconds}초만 확인됨.` : `Only the ${input.durationSeconds}s duration was verified.`),
       },
       narrativeAndPayoff: {
@@ -160,7 +177,7 @@ export function createLocalEvaluation(input: AuditInput): ReelEvaluation {
         safeZoneViolation: false,
         captionQuality: missingCaption ? (isKo ? '입력 없음' : 'Not supplied') : (isKo ? '입력 텍스트만 확인' : 'Supplied text only'),
         verdict: metrics
-          ? (isKo ? `${input.fileFormat}, ${metrics.width}×${metrics.height}, ${metrics.height > metrics.width ? '세로형' : '가로형'}; 공유성은 입력된 가치·컨셉 기준.` : `${input.fileFormat}, ${metrics.width}×${metrics.height}, ${metrics.height > metrics.width ? 'portrait' : 'landscape'}; shareability uses the supplied value and concept.`)
+          ? (isKo ? `${input.fileFormat}, ${metrics.width}×${metrics.height}, 선명도 ${metrics.sharpnessScore}/100, 노출 안정성 ${metrics.exposureStabilityScore}/100.` : `${input.fileFormat}, ${metrics.width}×${metrics.height}; sharpness ${metrics.sharpnessScore}/100; exposure stability ${metrics.exposureStabilityScore}/100.`)
           : (isKo ? `${input.fileFormat} 형식만 확인됨.` : `Only the ${input.fileFormat} format was verified.`),
       },
     },
