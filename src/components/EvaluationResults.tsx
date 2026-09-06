@@ -138,12 +138,33 @@ export const EvaluationResults: React.FC<EvaluationResultsProps> = ({
         <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-6 relative z-10">
           {/* Left: viewer-facing creative summary */}
           <div className="flex items-center gap-5">
+            <div className="flex flex-col items-center justify-center bg-slate-50 border border-gray-200 rounded-2xl p-4 shadow-sm min-w-[120px]">
+              <span className="text-4xl font-extrabold text-slate-900 font-sans tracking-tight">
+                {evaluation.overallStars.toFixed(1)}
+              </span>
+              <StarRating rating={evaluation.overallStars} size="sm" showNumeric={false} className="mt-1" />
+              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">
+                {t('outOf5')}
+              </span>
+            </div>
+
             <div className="space-y-1.5">
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className={`px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider border ${getVerdictBadge(evaluation.overallVerdict)}`}>
+                  {getVerdictLabel(evaluation.overallVerdict)}
+                </span>
+                <span className="text-xs font-semibold text-slate-500">
+                  {t('overallScoreLabel')}{' '}
+                  <span className="text-indigo-600 font-extrabold">{evaluation.overallScorePercent}%</span>
+                </span>
+              </div>
               <h2 className="text-2xl font-bold text-slate-900 tracking-tight">
                 {evaluation.title || (language === 'ko' ? '진단된 릴스' : 'Evaluated Reel')}
               </h2>
               <p className="text-xs text-slate-500 flex items-center gap-2 flex-wrap">
                 <span>{evaluation.niche}</span>
+                <span>•</span>
+                <span>{evaluation.durationSeconds}{language === 'ko' ? '초 재생' : 's duration'}</span>
                 <span>•</span>
                 <span>{evaluation.fileFormat}</span>
               </p>
