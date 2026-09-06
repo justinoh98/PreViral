@@ -1,4 +1,5 @@
 export interface ReelEvaluation {
+  visualObservations?: Array<{ location: string; observation: string; suggestion: string }>;
   id: string;
   title: string;
   videoUrl?: string;

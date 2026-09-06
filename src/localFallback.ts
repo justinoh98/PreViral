@@ -23,7 +23,7 @@ const r1 = (value: number) => Number(value.toFixed(1));
 const r2 = (value: number) => Number(value.toFixed(2));
 const sec = (value: number) => `${r1(Math.max(0, value))}s`;
 
-export function createLocalEvaluation(input: AuditInput): ReelEvaluation {
+function createLegacyEvaluation(input: AuditInput): ReelEvaluation {
   const m = input.videoMetrics;
   const ko = input.language === 'ko';
   const noCaption = !input.captionInput.trim();
@@ -159,6 +159,41 @@ export function createLocalEvaluation(input: AuditInput): ReelEvaluation {
     },
     actionableEdits: edits, captionOptimization: captions, stanceByStanceGuidance: guidance, isCachedEvaluation: false,
   };
+}
+
+export function createLocalEvaluation(input: AuditInput): ReelEvaluation {
+  // Neither metadata nor typed descriptions are visual evidence.
+  const result = createLegacyEvaluation({ ...input, title: '', niche: '', captionInput: '', videoConcept: '', audioType: '' });
+  const ko = input.language === 'ko';
+  const m = input.videoMetrics;
+  const observations: NonNullable<ReelEvaluation['visualObservations']> = [];
+  if (m && m.sampledFrames > 1) {
+    if (m.longestStaticDurationSec >= .8) observations.push({
+      location: `${sec(m.longestStaticStartSec)}–${sec(m.longestStaticEndSec)}`,
+      observation: ko ? '이 구간의 샘플 화면 사이에는 픽셀 변화가 적습니다. 지루한 장면이라는 뜻은 아닙니다.' : 'Sampled frames change little in this interval. This does not establish that the scene is boring.',
+      suggestion: ko ? '이 구간을 재생해 자막이나 동작에 필요한 시간인지 확인하세요. 불필요한 대기만 줄이세요.' : 'Replay this interval and check whether the hold is needed for reading or an action. Trim only unnecessary waiting.'
+    });
+    const darkest = [...m.timelineSamples].filter(p => Number.isFinite(p.brightness)).sort((a,b) => a.brightness-b.brightness)[0];
+    if (darkest && darkest.brightness < 16) observations.push({
+      location: sec(darkest.timeSec),
+      observation: ko ? '이 샘플 화면의 전체 밝기가 낮습니다. 의도된 어두운 장면일 수 있습니다.' : 'This sampled frame has low overall brightness. It may be intentionally dark.',
+      suggestion: ko ? '중요한 부분이 실제로 안 보일 때만 해당 장면의 노출을 조정하세요.' : 'Adjust this shot’s exposure only if important details are actually difficult to see.'
+    });
+    observations.push({
+      location: sec(m.strongestChangeTimeSec),
+      observation: ko ? '인접 샘플 화면 사이의 가장 큰 픽셀 변화가 이 지점 근처에서 측정됐습니다. 컷인지 움직임인지는 확인되지 않았습니다.' : 'The largest pixel change between adjacent samples was measured near here. It is not verified as a cut rather than movement.',
+      suggestion: ko ? '이 지점을 재생해 전환이 자연스러운지 확인하세요. 이 측정만으로 효과를 추가할 필요는 없습니다.' : 'Replay this point to check whether the change feels intentional. This measurement alone does not justify adding a transition effect.'
+    });
+  }
+  const unknown = ko ? '픽셀 분석만으로 확인할 수 없습니다.' : 'Not verifiable from pixel measurements.';
+  for (const aspect of Object.values(result.aspects)) aspect.verdict = unknown;
+  result.aspects.hookStrength.visualHook = unknown;
+  result.aspects.hookStrength.textHook = unknown;
+  result.aspects.hookStrength.audioHook = unknown;
+  result.aspects.technicalCompliance.captionQuality = unknown;
+  return { ...result, title: input.title, niche: '', videoConcept: '', captionInput: '',
+    visualObservations: observations, criticalDefectsIdentified: [], actionableEdits: [], stanceByStanceGuidance: [],
+    captionOptimization: { recommendedHooks: [], valueCTA: '', cliffhangerCTA: '', commentBaitQuestion: '', targetHashtags: [] } };
 }
 
 export function createLocalCaptions(topic: string, niche: string, language: string) {

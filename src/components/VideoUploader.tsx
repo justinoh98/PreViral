@@ -15,7 +15,7 @@ interface VideoUploaderProps {
   defaultNiche: string;
 }
 
-const EVALUATION_CACHE_VERSION = 16;
+const EVALUATION_CACHE_VERSION = 17;
 
 interface StoredEvaluation {
   scoringVersion: number;
@@ -505,21 +505,8 @@ export const VideoUploader: React.FC<VideoUploaderProps> = ({
         });
         return;
       }
-      const response = await fetch('/api/evaluate-reel', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          ...auditInput,
-          frameSnapshots,
-          hasWatermark: false,
-          detectedAudioSilence: false,
-          language,
-        }),
-      });
-
-      const evaluationData: ReelEvaluation = response.ok
-        ? await response.json()
-        : createLocalEvaluation(auditInput);
+      // Observation-only mode must not accept legacy template/API feedback.
+      const evaluationData = createLocalEvaluation(auditInput);
       const freshEvaluation = { ...evaluationData, isCachedEvaluation: false };
       storeEvaluation(cacheKey, auditInput.videoContentHash, freshEvaluation);
       onEvaluationComplete(freshEvaluation);
