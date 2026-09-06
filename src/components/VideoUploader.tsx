@@ -15,7 +15,7 @@ interface VideoUploaderProps {
   defaultNiche: string;
 }
 
-const EVALUATION_CACHE_VERSION = 8;
+const EVALUATION_CACHE_VERSION = 9;
 
 interface StoredEvaluation {
   scoringVersion: number;
@@ -352,6 +352,33 @@ export const VideoUploader: React.FC<VideoUploaderProps> = ({
       const startEndDifference = frameDifference(luminanceFrames[0], luminanceFrames[luminanceFrames.length - 1]);
       const brightnessMean = average(brightnessValues);
       const brightnessDeviation = Math.sqrt(average(brightnessValues.map((value) => (value - brightnessMean) ** 2)));
+      const strongestDifferenceIndex = differences.reduce(
+        (best, value, index) => value > (differences[best] ?? -1) ? index : best,
+        0
+      );
+      const openingDifferenceCount = Math.max(1, earlyCount - 1);
+      const strongestOpeningIndex = differences.slice(0, openingDifferenceCount).reduce(
+        (best, value, index, values) => value > (values[best] ?? -1) ? index : best,
+        0
+      );
+      let longestStaticStartIndex = 0;
+      let longestStaticLength = 0;
+      let currentStaticStart = 0;
+      let currentStaticLength = 0;
+      differences.forEach((value, index) => {
+        if (value < 1.15) {
+          if (currentStaticLength === 0) currentStaticStart = index;
+          currentStaticLength += 1;
+          if (currentStaticLength > longestStaticLength) {
+            longestStaticLength = currentStaticLength;
+            longestStaticStartIndex = currentStaticStart;
+          }
+        } else {
+          currentStaticLength = 0;
+        }
+      });
+      const staticStart = sampleTimes[longestStaticStartIndex] ?? 0;
+      const staticEnd = sampleTimes[Math.min(sampleTimes.length - 1, longestStaticStartIndex + longestStaticLength)] ?? staticStart;
       const videoMetrics: VideoMetrics = {
         width: sourceWidth,
         height: sourceHeight,
@@ -368,6 +395,16 @@ export const VideoUploader: React.FC<VideoUploaderProps> = ({
         colorfulnessScore: Math.round(average(colorfulnessValues)),
         exposureStabilityScore: Math.round(Math.max(0, 100 - brightnessDeviation * 3)),
         blackFrameRatio: Math.round(brightnessValues.filter((value) => value < 8).length / Math.max(1, brightnessValues.length) * 100),
+        strongestChangeTimeSec: Number((sampleTimes[strongestDifferenceIndex + 1] ?? 0).toFixed(1)),
+        strongestOpeningChangeTimeSec: Number((sampleTimes[strongestOpeningIndex + 1] ?? 0).toFixed(1)),
+        longestStaticStartSec: Number(staticStart.toFixed(1)),
+        longestStaticEndSec: Number(staticEnd.toFixed(1)),
+        longestStaticDurationSec: Number(Math.max(0, staticEnd - staticStart).toFixed(1)),
+        detectedCutTimesSec: differences
+          .map((value, index) => ({ value, time: sampleTimes[index + 1] ?? 0 }))
+          .filter(({ value }) => value >= 8)
+          .slice(0, 12)
+          .map(({ time }) => Number(time.toFixed(1))),
         sampledFrames: luminanceFrames.length,
       };
 

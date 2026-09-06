@@ -58,9 +58,9 @@ export interface ReelEvaluation {
     technicalCompliance: {
       stars: number;
       label: string;
-      watermarkDetected: boolean;
+      watermarkDetected: boolean | null;
       resolutionText: string;
-      safeZoneViolation: boolean;
+      safeZoneViolation: boolean | null;
       captionQuality: string;
       verdict: string;
     };
