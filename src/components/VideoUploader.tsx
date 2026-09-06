@@ -15,7 +15,7 @@ interface VideoUploaderProps {
   defaultNiche: string;
 }
 
-const EVALUATION_CACHE_VERSION = 9;
+const EVALUATION_CACHE_VERSION = 10;
 
 interface StoredEvaluation {
   scoringVersion: number;
@@ -405,6 +405,14 @@ export const VideoUploader: React.FC<VideoUploaderProps> = ({
           .filter(({ value }) => value >= 8)
           .slice(0, 12)
           .map(({ time }) => Number(time.toFixed(1))),
+        timelineSamples: sampleTimes.map((time, index) => ({
+          timeSec: Number(time.toFixed(1)),
+          motion: index === 0 ? 0 : Math.round(Math.min(100, (differences[index - 1] ?? 0) * 6)),
+          brightness: Math.round(brightnessValues[index] ?? 0),
+          contrast: Math.round(contrastValues[index] ?? 0),
+          sharpness: Math.round(sharpnessValues[index] ?? 0),
+          colorfulness: Math.round(colorfulnessValues[index] ?? 0),
+        })),
         sampledFrames: luminanceFrames.length,
       };
 
