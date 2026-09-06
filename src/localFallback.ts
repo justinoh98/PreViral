@@ -1,206 +1,123 @@
-import { getPresetReels } from './data/presets';
 import type { ReelEvaluation } from './types';
 
 type AuditInput = {
-  title: string;
-  durationSeconds: number;
-  fileFormat: string;
-  fileSizeMb: number;
-  niche: string;
-  captionInput: string;
-  videoConcept: string;
-  audioType: string;
-  videoContentHash?: string;
-  videoMetrics?: VideoMetrics;
-  language: 'en' | 'ko';
+  title: string; durationSeconds: number; fileFormat: string; fileSizeMb: number;
+  niche: string; captionInput: string; videoConcept: string; audioType: string;
+  videoContentHash?: string; videoMetrics?: VideoMetrics; language: 'en' | 'ko';
 };
 
 export type VideoMetrics = {
-  width: number;
-  height: number;
-  motionScore: number;
-  contrastScore: number;
-  brightnessScore: number;
-  loopSimilarityScore: number;
-  earlyMotionScore: number;
-  changeFrequencyScore: number;
-  payoffChangeScore: number;
-  sceneCutScore: number;
-  staticFrameRatio: number;
-  sharpnessScore: number;
-  colorfulnessScore: number;
-  exposureStabilityScore: number;
-  blackFrameRatio: number;
-  sampledFrames: number;
+  width: number; height: number; motionScore: number; contrastScore: number;
+  brightnessScore: number; loopSimilarityScore: number; earlyMotionScore: number;
+  changeFrequencyScore: number; payoffChangeScore: number; sceneCutScore: number;
+  staticFrameRatio: number; sharpnessScore: number; colorfulnessScore: number;
+  exposureStabilityScore: number; blackFrameRatio: number; sampledFrames: number;
+  strongestChangeTimeSec: number; strongestOpeningChangeTimeSec: number;
+  longestStaticStartSec: number; longestStaticEndSec: number; longestStaticDurationSec: number;
+  detectedCutTimesSec: number[];
 };
 
+const clamp = (value: number, min: number, max: number) => Math.max(min, Math.min(max, value));
+const r1 = (value: number) => Number(value.toFixed(1));
+const r2 = (value: number) => Number(value.toFixed(2));
+const sec = (value: number) => `${r1(Math.max(0, value))}s`;
+
 export function createLocalEvaluation(input: AuditInput): ReelEvaluation {
-  const base = structuredClone(getPresetReels(input.language)[0].preComputedEvaluation);
-  const missingCaption = !input.captionInput.trim();
-  const missingConcept = !input.videoConcept.trim();
-  const isKo = input.language === 'ko';
-  const metrics = input.videoMetrics;
+  const m = input.videoMetrics;
+  const ko = input.language === 'ko';
+  const noCaption = !input.captionInput.trim();
+  const noConcept = !input.videoConcept.trim();
+  const subject = (input.videoConcept || input.niche || (ko ? '이 영상' : 'this video')).trim();
+  const niche = (input.niche || (ko ? '콘텐츠' : 'content')).trim();
+  const duration = Math.max(1, input.durationSeconds);
+  const f = (value: number | undefined, fallback = 35) => (value ?? fallback) / 100;
 
-  // Browser-only fallback: score only signals that are actually available.
-  // Unknown visual/audio qualities receive neutral-conservative values rather
-  // than invented positive observations.
-  const factor = (value: number | undefined, fallback = 35) => (value ?? fallback) / 100;
-  const motionFactor = factor(metrics?.motionScore, 40);
-  const contrastFactor = factor(metrics?.contrastScore, 40);
-  const earlyMotionFactor = factor(metrics?.earlyMotionScore);
-  const changeFrequencyFactor = factor(metrics?.changeFrequencyScore);
-  const payoffFactor = factor(metrics?.payoffChangeScore);
-  const sceneCutFactor = factor(metrics?.sceneCutScore);
-  const sharpnessFactor = factor(metrics?.sharpnessScore, 40);
-  const colorfulnessFactor = factor(metrics?.colorfulnessScore, 40);
-  const exposureFactor = factor(metrics?.exposureStabilityScore, 40);
-  const staticPenalty = factor(metrics?.staticFrameRatio, 50);
-  const blackFramePenalty = factor(metrics?.blackFrameRatio, 0);
-
-  // Professional calibration: reward observed quality proportionally. Missing
-  // optional context stays unknown instead of being treated as proof of failure.
-  let hookStars = 1.0 + earlyMotionFactor * 2.35 + contrastFactor * 0.45 + sharpnessFactor * 0.3
-    + (missingCaption ? 0 : 0.3) - blackFramePenalty * 1.0;
-  if ((metrics?.earlyMotionScore ?? 0) < 18) hookStars = Math.min(hookStars, 2.8);
-  if (missingCaption) hookStars = Math.min(hookStars, 4.3);
-  hookStars = Number(Math.max(0.5, Math.min(5, hookStars)).toFixed(2));
-  const durationPenalty = input.durationSeconds <= 15 ? 0 : input.durationSeconds <= 30 ? 0.12 : 0.35;
-  let pacingStars = 1.05 + changeFrequencyFactor * 1.65 + motionFactor * 0.7 + sceneCutFactor * 0.55
-    - staticPenalty * 0.45 - durationPenalty;
-  if ((metrics?.changeFrequencyScore ?? 0) < 22) pacingStars = Math.min(pacingStars, 2.9);
-  pacingStars = Number(Math.max(0.5, Math.min(5, pacingStars)).toFixed(2));
-  let narrativeStars = 1.05 + payoffFactor * 1.8 + changeFrequencyFactor * 0.4 + (missingConcept ? 0 : 0.55);
-  if (missingConcept) narrativeStars = Math.min(narrativeStars, 3.7);
-  if ((metrics?.payoffChangeScore ?? 0) < 18) narrativeStars = Math.min(narrativeStars, 2.9);
-  narrativeStars = Number(Math.max(0.5, Math.min(5, narrativeStars)).toFixed(2));
-  // Frame similarity alone does not prove a seamless audio loop or a rewatch trigger.
-  const loopStars = Number(Math.max(0.5, Math.min(4.1, 0.85 + factor(metrics?.loopSimilarityScore, 30) * 3.05)).toFixed(2));
-  const resolutionPoints = metrics ? (metrics.width >= 1080 && metrics.height >= 1080 ? 1.55 : metrics.width >= 720 ? 0.9 : 0.25) : 0.45;
-  const portraitPoints = metrics && metrics.height > metrics.width ? 0.65 : 0.15;
-  const shareabilityPoints = (missingConcept ? 0 : 0.2) + (missingCaption ? 0 : 0.2);
-  let techStars = 0.85 + resolutionPoints + portraitPoints + shareabilityPoints
-    + sharpnessFactor * 0.45 + colorfulnessFactor * 0.2 + exposureFactor * 0.25 - blackFramePenalty * 0.7;
-  if (!metrics || metrics.width < 720) techStars = Math.min(techStars, 3.0);
-  techStars = Number(Math.max(0.5, Math.min(5, techStars)).toFixed(2));
-  // PDF rubric weights: Hook 30%, Pacing 25%, Narrative/Payoff 20%,
-  // Loop/Rewatch 10%, Quality/Shareability 15%.
-  const failedCorePillars = [hookStars, pacingStars, narrativeStars].filter((score) => score < 1.8).length;
-  const evidencePenalty = failedCorePillars * 0.08;
-  const weightedScore = hookStars * 0.3 + pacingStars * 0.25 + narrativeStars * 0.2 + loopStars * 0.1 + techStars * 0.15;
-  const stars = Number(Math.max(0.5, weightedScore - evidencePenalty).toFixed(2));
+  let hook = 1 + f(m?.earlyMotionScore) * 2.35 + f(m?.contrastScore, 40) * .45 + f(m?.sharpnessScore, 40) * .3 + (noCaption ? 0 : .3) - f(m?.blackFrameRatio, 0);
+  if ((m?.earlyMotionScore ?? 0) < 18) hook = Math.min(hook, 2.8);
+  if (noCaption) hook = Math.min(hook, 4.3);
+  hook = r2(clamp(hook, .5, 5));
+  const durationPenalty = duration <= 15 ? 0 : duration <= 30 ? .12 : .35;
+  let pacing = 1.05 + f(m?.changeFrequencyScore) * 1.65 + f(m?.motionScore, 40) * .7 + f(m?.sceneCutScore) * .55 - f(m?.staticFrameRatio, 50) * .45 - durationPenalty;
+  if ((m?.changeFrequencyScore ?? 0) < 22) pacing = Math.min(pacing, 2.9);
+  pacing = r2(clamp(pacing, .5, 5));
+  let narrative = 1.05 + f(m?.payoffChangeScore) * 1.8 + f(m?.changeFrequencyScore) * .4 + (noConcept ? 0 : .55);
+  if (noConcept) narrative = Math.min(narrative, 3.7);
+  if ((m?.payoffChangeScore ?? 0) < 18) narrative = Math.min(narrative, 2.9);
+  narrative = r2(clamp(narrative, .5, 5));
+  const loop = r2(clamp(.85 + f(m?.loopSimilarityScore, 30) * 3.05, .5, 4.1));
+  const resolution = m ? (m.width >= 1080 && m.height >= 1080 ? 1.55 : m.width >= 720 ? .9 : .25) : .45;
+  let technical = .85 + resolution + (m && m.height > m.width ? .65 : .15) + (noConcept ? 0 : .2) + (noCaption ? 0 : .2) + f(m?.sharpnessScore, 40) * .45 + f(m?.colorfulnessScore, 40) * .2 + f(m?.exposureStabilityScore, 40) * .25 - f(m?.blackFrameRatio, 0) * .7;
+  if (!m || m.width < 720) technical = Math.min(technical, 3);
+  technical = r2(clamp(technical, .5, 5));
+  const penalty = [hook, pacing, narrative].filter((score) => score < 1.8).length * .08;
+  const stars = r2(clamp(hook * .3 + pacing * .25 + narrative * .2 + loop * .1 + technical * .15 - penalty, .5, 5));
   const verdict = stars >= 4.2 ? 'Viral Contender' : stars >= 3.5 ? 'Strong Growth' : stars >= 2.8 ? 'Moderate Retention' : 'High Skip Risk';
-  const evidenceLimit = metrics
-    ? (isKo
-        ? `${metrics.sampledFrames}개 프레임에서 측정한 움직임·대비·밝기와 영상 메타데이터를 기준으로 평가했습니다.`
-        : `Scored from motion, contrast, brightness, and metadata measured across ${metrics.sampledFrames} sampled frames.`)
-    : (isKo
-        ? '브라우저에서 직접 검증되지 않은 항목은 보수적인 중립 점수로 처리했습니다.'
-        : 'Signals not directly verified in the browser were scored conservatively as unknown.');
+
+  const openingTime = m?.strongestOpeningChangeTimeSec ?? Math.min(1, duration);
+  const strongestTime = m?.strongestChangeTimeSec ?? duration / 2;
+  const staticStart = m?.longestStaticStartSec ?? 0;
+  const staticEnd = m?.longestStaticEndSec ?? 0;
+  const staticDuration = m?.longestStaticDurationSec ?? 0;
+  const cutCount = m?.detectedCutTimesSec.length ?? 0;
+  const payoffTime = r1(duration * .85);
+  const staticRange = `${sec(staticStart)}–${sec(staticEnd)}`;
+  const evidence = m
+    ? (ko ? `${m.sampledFrames}개 프레임 측정: 움직임 ${m.motionScore}, 변화 빈도 ${m.changeFrequencyScore}, 선명도 ${m.sharpnessScore}, 노출 안정성 ${m.exposureStabilityScore}/100.` : `${m.sampledFrames} measured frames: motion ${m.motionScore}, change frequency ${m.changeFrequencyScore}, sharpness ${m.sharpnessScore}, exposure stability ${m.exposureStabilityScore}/100.`)
+    : (ko ? '영상 프레임 측정값을 사용할 수 없습니다.' : 'Video-frame measurements were unavailable.');
+
+  const defects: string[] = [];
+  if (!m) defects.push(evidence);
+  if (m && m.earlyMotionScore < 18) defects.push(ko ? `첫 3초 움직임 ${m.earlyMotionScore}/100으로 시작부 이탈 위험이 큽니다.` : `Opening motion is ${m.earlyMotionScore}/100, creating high early-skip risk.`);
+  if (m && staticDuration >= 1.5) defects.push(ko ? `${staticRange}에 ${sec(staticDuration)}의 최장 시각 정체가 측정됐습니다.` : `The longest visual hold lasts ${sec(staticDuration)} at ${staticRange}.`);
+  if (m && m.payoffChangeScore < 18) defects.push(ko ? `후반 변화량 ${m.payoffChangeScore}/100으로 결말의 시각적 구분이 약합니다.` : `Late-stage change is ${m.payoffChangeScore}/100, so the payoff is weakly differentiated.`);
+  if (m && m.blackFrameRatio >= 5) defects.push(ko ? `샘플 프레임 중 ${m.blackFrameRatio}%가 거의 검은 화면입니다.` : `${m.blackFrameRatio}% of sampled frames are near-black.`);
+  if (m && (m.width < 720 || m.height < 720)) defects.push(ko ? `해상도 ${m.width}×${m.height}는 숏폼 배포 기준보다 낮습니다.` : `Resolution ${m.width}×${m.height} is below a strong short-form baseline.`);
+
+  const edits: ReelEvaluation['actionableEdits'] = [];
+  if ((m?.earlyMotionScore ?? 0) < 55) edits.push({ id: 'opening', timestampRange: `0-${sec(Math.min(3, duration))}`, type: 'hook', severity: (m?.earlyMotionScore ?? 0) < 18 ? 'critical' : 'recommended', issue: ko ? `첫 3초 움직임 ${m?.earlyMotionScore ?? 0}/100, 시작부 최대 변화는 ${sec(openingTime)}입니다.` : `Opening motion is ${m?.earlyMotionScore ?? 0}/100; the strongest early change is at ${sec(openingTime)}.`, solution: ko ? `${sec(openingTime)}의 변화 장면을 첫 프레임 가까이 당기고 ${subject}의 핵심 결과를 1초 안에 보여주세요.` : `Move the change at ${sec(openingTime)} closer to frame one and reveal the key result of ${subject} within one second.` });
+  if (m && staticDuration >= .8) edits.push({ id: 'static', timestampRange: staticRange, type: 'pacing', severity: staticDuration >= 1.5 ? 'critical' : 'recommended', issue: ko ? `${staticRange}가 최장 저변화 구간이며 ${sec(staticDuration)} 지속됩니다.` : `${staticRange} is this upload's longest low-change span, lasting ${sec(staticDuration)}.`, solution: ko ? `이 구간을 ${Math.max(.3, r1(staticDuration / 2))}초 이하로 압축하거나 ${subject}에 관한 새 앵글·동작·정보를 넣으세요.` : `Compress it to ${Math.max(.3, r1(staticDuration / 2))}s or less, or add a new angle, action, or information specific to ${subject}.` });
+  if ((m?.payoffChangeScore ?? 0) < 55) edits.push({ id: 'payoff', timestampRange: `${sec(duration * .72)}–${sec(duration)}`, type: 'payoff', severity: (m?.payoffChangeScore ?? 0) < 18 ? 'critical' : 'recommended', issue: ko ? `마지막 15% 변화량은 ${m?.payoffChangeScore ?? 0}/100입니다.` : `Change across the final 15% is ${m?.payoffChangeScore ?? 0}/100.`, solution: ko ? `${sec(payoffTime)} 전후에 ${subject}의 완성 결과를 더 명확하게 유지하고 직전 장면과 대비시키세요.` : `Hold the completed result of ${subject} clearly around ${sec(payoffTime)} and contrast it with the preceding shot.` });
+  if ((m?.loopSimilarityScore ?? 0) < 70) edits.push({ id: 'loop', timestampRange: `${sec(duration - Math.min(1.5, duration / 4))}–${sec(duration)}`, type: 'cut', severity: 'recommended', issue: ko ? `첫·마지막 프레임 유사도 ${m?.loopSimilarityScore ?? 0}/100입니다.` : `First-to-last visual similarity is ${m?.loopSimilarityScore ?? 0}/100.`, solution: ko ? `마지막 구도·밝기·피사체 위치를 첫 프레임과 맞춰 시각 루프를 강화하세요.` : `Match the ending composition, brightness, and subject position to frame one to strengthen the visual loop.` });
+  if (m && (m.sharpnessScore < 38 || m.exposureStabilityScore < 55)) edits.push({ id: 'quality', timestampRange: `0–${sec(duration)}`, type: 'safezone', severity: 'recommended', issue: ko ? `선명도 ${m.sharpnessScore}/100, 노출 안정성 ${m.exposureStabilityScore}/100입니다.` : `Sharpness is ${m.sharpnessScore}/100 and exposure stability is ${m.exposureStabilityScore}/100.`, solution: ko ? `과도한 압축을 줄이고 노출 변화가 큰 컷을 개별 보정해 ${subject}의 디테일을 일정하게 유지하세요.` : `Reduce aggressive compression and correct unstable shots individually so ${subject} stays consistently detailed.` });
+  if (!edits.length) edits.push({ id: 'refine', timestampRange: `${sec(Math.max(0, strongestTime - .5))}–${sec(Math.min(duration, strongestTime + .5))}`, type: 'pacing', severity: 'optional', issue: ko ? `${sec(strongestTime)}에서 최대 시각 변화가 측정됐고 치명적 결함은 없습니다.` : `The strongest visual change is at ${sec(strongestTime)}; no critical measured defect was found.`, solution: ko ? `이 지점을 ${subject}의 핵심 전환점으로 유지하고 주변 컷 리듬만 미세 조정하세요.` : `Keep this as the main turning point for ${subject} and only fine-tune the surrounding cut rhythm.` });
+
+  const safeTag = niche.replace(/[^\p{L}\p{N}]/gu, '');
+  const captions: ReelEvaluation['captionOptimization'] = ko ? {
+    recommendedHooks: [`${subject}, 결과부터 먼저 보여드릴게요.`, `${subject}에서 가장 크게 달라지는 순간입니다.`, `${subject}의 완성도를 바꾼 한 장면.`],
+    valueCTA: `${subject}의 과정과 결과를 비교하고 도움이 됐다면 저장해 두세요.`, cliffhangerCTA: `${subject}의 다음 변화도 같은 방식으로 보여드리겠습니다.`, commentBaitQuestion: `${subject}에서 가장 인상적인 변화는 어느 구간이었나요?`, targetHashtags: [`#${safeTag || '콘텐츠'}`, '#릴스제작', '#숏폼콘텐츠', '#영상편집', '#콘텐츠크리에이터']
+  } : {
+    recommendedHooks: [`Here is the result of ${subject} first.`, `This is the moment ${subject} changes most.`, `One visual decision changed the finish of ${subject}.`],
+    valueCTA: `Compare the process and result of ${subject}, and save this if the breakdown is useful.`, cliffhangerCTA: `The next change to ${subject} will use the same visual breakdown.`, commentBaitQuestion: `Which moment in ${subject} made the strongest visual difference?`, targetHashtags: [`#${safeTag || 'content'}`, '#reelsediting', '#shortformvideo', '#videocreator', '#contentstrategy']
+  };
+
+  const p1 = r1(Math.min(3, duration));
+  const p2 = r1(Math.min(duration, Math.max(p1 + 1, duration * .55)));
+  const guidance: NonNullable<ReelEvaluation['stanceByStanceGuidance']> = [
+    { durationRange: `0-${p1}s`, stanceTheme: ko ? `시작 움직임 ${m?.earlyMotionScore ?? 0}/100` : `Opening motion ${m?.earlyMotionScore ?? 0}/100`, optionAHookText: captions.recommendedHooks[0], optionBHookText: captions.recommendedHooks[1], optionCHookText: captions.recommendedHooks[2], onScreenGuidance: ko ? `${sec(openingTime)}의 강한 변화에 맞춰 텍스트를 0.5초 안에 표시하세요.` : `Time the text to the strong change near ${sec(openingTime)} and show it within 0.5s.` },
+    { durationRange: `${p1}-${p2}s`, stanceTheme: ko ? `중반 변화 빈도 ${m?.changeFrequencyScore ?? 0}/100` : `Mid-video change frequency ${m?.changeFrequencyScore ?? 0}/100`, optionAHookText: ko ? `${subject}의 핵심 과정` : `The key process behind ${subject}`, optionBHookText: ko ? '여기서 무엇이 달라질까요?' : 'What changes at this point?', optionCHookText: ko ? '가장 큰 차이는 이 장면입니다.' : 'This shot creates the biggest difference.', onScreenGuidance: ko ? `감지된 주요 변화 ${cutCount}개를 기준으로 새 정보가 없는 정적 구간을 줄이세요.` : `With ${cutCount} major visual changes detected, shorten static spans that add no new information.` },
+    { durationRange: `${p2}-${r1(duration)}s`, stanceTheme: ko ? `후반 변화 ${m?.payoffChangeScore ?? 0}/100` : `Late-stage change ${m?.payoffChangeScore ?? 0}/100`, optionAHookText: ko ? `${subject}의 최종 결과` : `The final result of ${subject}`, optionBHookText: ko ? '어느 버전이 더 효과적인가요?' : 'Which version works better?', optionCHookText: ko ? '마지막 장면에서 완성됩니다.' : 'It resolves in the final shot.', onScreenGuidance: ko ? `${sec(payoffTime)} 전후에 결과를 충분히 유지하고 마지막 구도를 첫 프레임과 비교하세요.` : `Hold the result around ${sec(payoffTime)} and compare the ending composition with frame one.` },
+  ];
 
   return {
-    ...base,
-    id: `eval-${Date.now()}`,
-    title: input.title,
-    durationSeconds: input.durationSeconds,
-    fileFormat: input.fileFormat,
-    fileSizeMb: input.fileSizeMb,
-    niche: input.niche,
-    captionInput: input.captionInput,
-    videoConcept: input.videoConcept,
-    audioType: input.audioType,
-    timestamp: new Date().toISOString(),
-    overallStars: stars,
-    overallScorePercent: Math.round(weightedScore * 20 - evidencePenalty * 20),
-    overallVerdict: verdict,
-    expectedSkipRatePercent: Math.min(65, Math.max(12, Math.round(50 - stars * 7))),
-    followerGrowthPotentialPercent: Math.round(stars * 18 + 5),
-    nonFollowerInterestStars: Number((stars * 0.95).toFixed(2)),
-    shareabilitySendScore: Math.round(stars * 18.5),
-    criticalDefectsIdentified: [
-      ...(missingCaption
-        ? [isKo ? '화면 자막 훅과 게시용 캡션이 입력되지 않아 텍스트 훅을 검증할 수 없습니다.' : 'No on-screen hook or caption was supplied, so text-hook effectiveness cannot be verified.']
-        : []),
-      ...(missingConcept
-        ? [isKo ? '기획 의도가 입력되지 않아 스토리 구조를 의도와 대조할 수 없습니다.' : 'No creative intent was supplied, so the narrative cannot be checked against its intended outcome.']
-        : []),
-      evidenceLimit,
-    ],
+    id: `eval-${Date.now()}`, title: input.title, durationSeconds: duration, fileFormat: input.fileFormat, fileSizeMb: input.fileSizeMb, niche,
+    captionInput: input.captionInput, videoConcept: input.videoConcept, audioType: input.audioType, timestamp: new Date().toISOString(),
+    overallStars: stars, overallScorePercent: Math.round(stars * 20), overallVerdict: verdict,
+    expectedSkipRatePercent: clamp(Math.round(50 - stars * 7), 12, 65), followerGrowthPotentialPercent: Math.round(stars * 18 + 5), nonFollowerInterestStars: r2(stars * .95), shareabilitySendScore: Math.round(stars * 18.5),
+    criticalDefectsIdentified: defects.length ? defects : [ko ? `측정된 시각 신호에서 치명적 결함은 없었습니다. ${evidence}` : `No critical defect was found in the measured visual signals. ${evidence}`],
     aspects: {
-      ...base.aspects,
-      hookStrength: {
-        ...base.aspects.hookStrength,
-        stars: hookStars,
-        visualHook: metrics
-          ? (isKo ? `0-3초 움직임 ${metrics.earlyMotionScore}/100, 대비 ${metrics.contrastScore}/100.` : `0-3s motion ${metrics.earlyMotionScore}/100; contrast ${metrics.contrastScore}/100.`)
-          : (isKo ? '현재 브라우저 분석에서 직접 검증되지 않음.' : 'Not directly verified in the current browser analysis.'),
-        textHook: missingCaption
-          ? (isKo ? '입력 없음: 텍스트 훅을 평가할 수 없습니다.' : 'Not supplied: text-hook quality cannot be evaluated.')
-          : (isKo ? '입력된 캡션을 기준으로만 평가했습니다.' : 'Evaluated only from the supplied caption text.'),
-        audioHook: isKo ? '현재 브라우저 분석에서 직접 검증되지 않음.' : 'Not directly verified in the current browser analysis.',
-        verdict: evidenceLimit,
-      },
-      pacingAndStimulation: {
-        ...base.aspects.pacingAndStimulation,
-        stars: pacingStars,
-        label: isKo ? '1-2초 패턴 인터럽트' : '1-2 Second Pattern Interrupts',
-        avgCutFrequencySec: metrics ? Number((input.durationSeconds / Math.max(1, metrics.sampledFrames - 1)).toFixed(1)) : 0,
-        deadAirDetectedSec: 0,
-        patternInterruptsCount: 0,
-        verdict: metrics
-          ? (isKo ? `변화 충족률 ${metrics.changeFrequencyScore}/100, 움직임 ${metrics.motionScore}/100, 정적 구간 ${metrics.staticFrameRatio}%.` : `Change compliance ${metrics.changeFrequencyScore}/100; motion ${metrics.motionScore}/100; static intervals ${metrics.staticFrameRatio}%.`)
-          : (isKo ? `재생 시간 ${input.durationSeconds}초만 확인됨.` : `Only the ${input.durationSeconds}s duration was verified.`),
-      },
-      narrativeAndPayoff: {
-        ...base.aspects.narrativeAndPayoff,
-        stars: narrativeStars,
-        label: isKo ? '전개 구조 & 최종 페이오프' : 'Process Structure & Final Payoff',
-        setupDurationSec: 0,
-        payoffTimingSec: 0,
-        verdict: missingConcept
-          ? (isKo ? '기획 의도가 없어 서사 목표를 검증할 수 없음.' : 'Narrative intent was not supplied, so payoff alignment cannot be verified.')
-          : (isKo ? `입력된 기획 의도와 후반 프레임 변화량 ${metrics?.payoffChangeScore ?? 0}/100 기준.` : `Based on the stated intent and final-frame change score of ${metrics?.payoffChangeScore ?? 0}/100.`),
-      },
-      loopingAndRetention: {
-        ...base.aspects.loopingAndRetention,
-        stars: loopStars,
-        label: isKo ? '루프 연속성 & 재시청 유도' : 'Loop Continuity & Rewatch Trigger',
-        seamlessLoopScore: metrics?.loopSimilarityScore ?? 50,
-        rewatchTriggerPresent: (metrics?.loopSimilarityScore ?? 0) >= 70,
-        verdict: metrics
-          ? (isKo ? `첫·마지막 샘플 프레임 유사도 ${metrics.loopSimilarityScore}/100.` : `First/last sampled-frame similarity ${metrics.loopSimilarityScore}/100.`)
-          : (isKo ? '영상의 시작·끝 연결은 현재 분석에서 검증되지 않음.' : 'Start/end continuity was not verified in the current analysis.'),
-      },
-      technicalCompliance: {
-        ...base.aspects.technicalCompliance,
-        stars: techStars,
-        label: isKo ? '품질 & 공유 가능성' : 'Quality & Shareability',
-        watermarkDetected: false,
-        resolutionText: metrics ? `${metrics.width} × ${metrics.height}` : (isKo ? '해상도 미검증' : 'Resolution not verified'),
-        safeZoneViolation: false,
-        captionQuality: missingCaption ? (isKo ? '입력 없음' : 'Not supplied') : (isKo ? '입력 텍스트만 확인' : 'Supplied text only'),
-        verdict: metrics
-          ? (isKo ? `${input.fileFormat}, ${metrics.width}×${metrics.height}, 선명도 ${metrics.sharpnessScore}/100, 노출 안정성 ${metrics.exposureStabilityScore}/100.` : `${input.fileFormat}, ${metrics.width}×${metrics.height}; sharpness ${metrics.sharpnessScore}/100; exposure stability ${metrics.exposureStabilityScore}/100.`)
-          : (isKo ? `${input.fileFormat} 형식만 확인됨.` : `Only the ${input.fileFormat} format was verified.`),
-      },
+      hookStrength: { stars: hook, label: ko ? '0-3초 시각 훅' : 'Measured 0-3s Visual Hook', visualHook: m ? (ko ? `첫 3초 움직임 ${m.earlyMotionScore}/100, 대비 ${m.contrastScore}/100, 최대 시작 변화 ${sec(openingTime)}.` : `Opening motion ${m.earlyMotionScore}/100, contrast ${m.contrastScore}/100, strongest early change at ${sec(openingTime)}.`) : evidence, textHook: noCaption ? (ko ? '입력 캡션 없음; 텍스트 효과는 채점하지 않았습니다.' : 'No supplied caption; text effectiveness was not scored.') : (ko ? `입력 캡션: “${input.captionInput}”` : `Supplied caption: “${input.captionInput}”`), audioHook: ko ? `선택 오디오 설명: ${input.audioType || '없음'}. 실제 파형은 미검증입니다.` : `Selected audio description: ${input.audioType || 'none'}. The waveform was not verified.`, verdict: ko ? '현재 업로드의 측정된 시작 신호만 반영했습니다.' : 'Based only on measured opening signals from this upload.' },
+      pacingAndStimulation: { stars: pacing, label: ko ? '측정된 시각 페이싱' : 'Measured Visual Pacing', avgCutFrequencySec: cutCount ? r1(duration / cutCount) : 0, deadAirDetectedSec: staticDuration, patternInterruptsCount: cutCount, verdict: m ? (ko ? `변화 빈도 ${m.changeFrequencyScore}/100, 움직임 ${m.motionScore}/100, 주요 변화 ${cutCount}개, 최장 정체 ${sec(staticDuration)}.` : `Change frequency ${m.changeFrequencyScore}/100, motion ${m.motionScore}/100, ${cutCount} major changes, longest hold ${sec(staticDuration)}.`) : evidence },
+      narrativeAndPayoff: { stars: narrative, label: ko ? '측정된 전개 & 결과 강조' : 'Measured Progression & Payoff', setupDurationSec: p1, payoffTimingSec: payoffTime, verdict: ko ? `${noConcept ? '기획 의도 미입력; ' : `기획 의도 “${input.videoConcept}”; `}후반 변화 ${m?.payoffChangeScore ?? 0}/100, 최대 전체 변화 ${sec(strongestTime)}.` : `${noConcept ? 'No creative intent supplied; ' : `Intent: “${input.videoConcept}”; `}late-stage change ${m?.payoffChangeScore ?? 0}/100, strongest overall change at ${sec(strongestTime)}.` },
+      loopingAndRetention: { stars: loop, label: ko ? '첫·마지막 프레임 연결성' : 'First-to-Last Frame Continuity', seamlessLoopScore: m?.loopSimilarityScore ?? 0, rewatchTriggerPresent: (m?.loopSimilarityScore ?? 0) >= 70, verdict: ko ? `첫·마지막 샘플 프레임 유사도 ${m?.loopSimilarityScore ?? 0}/100. 오디오 루프는 미검증입니다.` : `First-to-last sampled-frame similarity is ${m?.loopSimilarityScore ?? 0}/100. Audio looping was not verified.` },
+      technicalCompliance: { stars: technical, label: ko ? '측정된 영상 품질' : 'Measured Video Quality', watermarkDetected: null, resolutionText: m ? `${m.width} × ${m.height}` : (ko ? '확인 불가' : 'Not verified'), safeZoneViolation: null, captionQuality: noCaption ? (ko ? '입력 캡션 없음; 화면 자막 위치 미검증' : 'No supplied caption; on-screen placement not verified') : (ko ? '입력 캡션 확인; 화면 내 위치 미검증' : 'Supplied caption reviewed; on-screen placement not verified'), verdict: m ? (ko ? `선명도 ${m.sharpnessScore}/100, 색채량 ${m.colorfulnessScore}/100, 노출 안정성 ${m.exposureStabilityScore}/100, 암전 ${m.blackFrameRatio}%.` : `Sharpness ${m.sharpnessScore}/100, colorfulness ${m.colorfulnessScore}/100, exposure stability ${m.exposureStabilityScore}/100, near-black frames ${m.blackFrameRatio}%.`) : evidence },
     },
+    actionableEdits: edits, captionOptimization: captions, stanceByStanceGuidance: guidance, isCachedEvaluation: false,
   };
 }
 
 export function createLocalCaptions(topic: string, niche: string, language: string) {
-  if (language === 'ko') {
-    return {
-      hooks: [`멈춰서 보세요: ${topic}의 핵심은 바로 이것입니다 🔥`, `${topic}, 아직도 이렇게 하고 계신가요?`, `30일 동안 직접 검증한 ${topic}의 결과 👇`],
-      valueCTA: `${niche} 성장 전략을 더 보고 싶다면 팔로우하세요!`,
-      cliffhangerCTA: '다음 릴스에서 전체 과정을 공개합니다—저장하고 기다려주세요!',
-      commentBaitQuestion: '어떤 방법을 먼저 적용해보고 싶으신가요?',
-      hashtags: ['#릴스성장', '#콘텐츠크리에이터', '#바이럴릴스', '#인스타그램팁', '#크리에이터노하우'],
-    };
-  }
-  return {
-    hooks: [`Stop scrolling: this changes how you approach ${topic} 🔥`, `Are you still making this ${topic} mistake?`, `I tested this ${topic} approach so you don't have to 👇`],
-    valueCTA: `Follow for more practical ${niche} growth strategies!`,
-    cliffhangerCTA: 'I’ll reveal the full process in the next Reel—save this and follow along!',
-    commentBaitQuestion: 'Which change would you try first?',
-    hashtags: ['#reelsgrowth', '#contentcreator', '#viralreels', '#instagramtips', '#creatortips'],
-  };
+  const subject = topic.trim() || niche.trim() || (language === 'ko' ? '이 콘텐츠' : 'this content');
+  return language === 'ko'
+    ? { hooks: [`${subject}, 결과부터 먼저 보여드릴게요.`, `${subject}에서 가장 달라지는 순간입니다.`, `${subject}의 완성도를 바꾼 한 장면.`], valueCTA: `${subject}의 과정과 결과를 비교하고 저장해 두세요.`, cliffhangerCTA: `${subject}의 다음 변화도 이어서 보여드리겠습니다.`, commentBaitQuestion: `${subject}에서 가장 인상적인 변화는 무엇인가요?`, hashtags: ['#릴스제작', '#숏폼콘텐츠', '#영상편집', '#콘텐츠전략', '#크리에이터'] }
+    : { hooks: [`Here is the result of ${subject} first.`, `This is where ${subject} changes most.`, `One visual decision changed ${subject}.`], valueCTA: `Compare the process and result of ${subject}, and save this breakdown.`, cliffhangerCTA: `The next change to ${subject} will continue this breakdown.`, commentBaitQuestion: `Which moment in ${subject} made the strongest difference?`, hashtags: ['#reelsediting', '#shortformvideo', '#videocreator', '#contentstrategy', '#creator'] };
 }

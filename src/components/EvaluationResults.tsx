@@ -463,8 +463,8 @@ export const EvaluationResults: React.FC<EvaluationResultsProps> = ({
             </div>
             <div className="grid grid-cols-2 gap-2 text-[11px] bg-white p-2.5 rounded-xl border border-gray-100 text-slate-600">
               <div><strong className="text-slate-800">{t('resolutionLabel')}</strong> {evaluation.aspects.technicalCompliance.resolutionText}</div>
-              <div><strong className="text-slate-800">{t('watermarkLabel')}</strong> {evaluation.aspects.technicalCompliance.watermarkDetected ? (language === 'ko' ? '감지됨 (제거 권장)' : 'Detected') : (language === 'ko' ? '없음 (양호)' : 'Clean')}</div>
-              <div><strong className="text-slate-800">{t('safeZonesLabel')}</strong> {evaluation.aspects.technicalCompliance.safeZoneViolation ? (language === 'ko' ? '침범 감지됨' : 'Violation detected') : (language === 'ko' ? '올바르게 정렬됨' : 'Aligned correctly')}</div>
+              <div><strong className="text-slate-800">{t('watermarkLabel')}</strong> {evaluation.aspects.technicalCompliance.watermarkDetected == null ? (language === 'ko' ? '확인 불가' : 'Not verified') : evaluation.aspects.technicalCompliance.watermarkDetected ? (language === 'ko' ? '감지됨 (제거 권장)' : 'Detected') : (language === 'ko' ? '없음 (양호)' : 'Clean')}</div>
+              <div><strong className="text-slate-800">{t('safeZonesLabel')}</strong> {evaluation.aspects.technicalCompliance.safeZoneViolation == null ? (language === 'ko' ? '확인 불가' : 'Not verified') : evaluation.aspects.technicalCompliance.safeZoneViolation ? (language === 'ko' ? '침범 감지됨' : 'Violation detected') : (language === 'ko' ? '올바르게 정렬됨' : 'Aligned correctly')}</div>
               <div><strong className="text-slate-800">{t('captionsLabel')}</strong> {evaluation.aspects.technicalCompliance.captionQuality}</div>
             </div>
           </div>
