@@ -30,6 +30,8 @@ export function createLocalEvaluation(input: AuditInput): ReelEvaluation {
   const noConcept = !input.videoConcept.trim();
   const niche = (input.niche || (ko ? '콘텐츠' : 'content')).trim();
   const subject = (input.videoConcept || input.title || niche).trim();
+  const suppliedCopy = input.captionInput.replace(/#[^\s#]+/g, '').trim();
+  const shortSubject = subject.length > 54 ? `${subject.slice(0, 51).trim()}…` : subject;
   const duration = Math.max(1, input.durationSeconds);
   const f = (value: number | undefined, fallback = 35) => (value ?? fallback) / 100;
 
@@ -91,20 +93,24 @@ export function createLocalEvaluation(input: AuditInput): ReelEvaluation {
   const edits: ReelEvaluation['actionableEdits'] = [];
   edits.push({
     id: 'written-hook', timestampRange: 'Opening frame', type: 'hook', severity: 'recommended',
-    issue: ko ? `첫 프레임에서 ${subject}의 핵심을 읽을 수 있는 짧은 문구가 필요합니다.` : `The first frame needs a short line that immediately frames ${subject}.`,
+    issue: ko
+      ? `${activeVideo ? '첫 화면의 움직임은 빠르지만 무엇을 봐야 하는지 바로 설명되지 않습니다.' : '첫 화면이 차분해 핵심 장면이 나오기 전에 넘길 가능성이 있습니다.'}`
+      : `${activeVideo ? 'The opening moves quickly but does not immediately tell viewers what to watch.' : 'The opening is visually calm, so viewers may swipe before the key image appears.'}`,
     solution: ko
-      ? `화면 중앙에 “${activeVideo ? `${subject}, 놓치면 다시 봐야 합니다` : `${subject}, 무엇이 달라졌을까요?`}”를 표시하세요. 흰색 굵은 글자와 어두운 반투명 배경을 사용하세요.`
-      : `Place “${activeVideo ? `${subject} — don't blink` : `What changed in ${subject}?`}” in the center. Use bold white type on a dark translucent plate.`
+      ? `첫 장면의 피사체 가까이에 “${activeVideo ? `${shortSubject}, 이 변화를 보세요` : `${shortSubject}, 무엇이 달라질까요?`}”를 넣으세요. ${suppliedCopy ? `현재 캡션의 긴 문장 “${suppliedCopy.slice(0, 70)}${suppliedCopy.length > 70 ? '…' : ''}”은 화면에 그대로 쓰지 말고 이 짧은 훅으로 교체하세요.` : '피사체를 가리지 않도록 빈 배경 쪽에 배치하세요.'}`
+      : `Place “${activeVideo ? `${shortSubject}: watch this change` : `What changes in ${shortSubject}?`}” beside the subject in the opening shot. ${suppliedCopy ? `Do not place the longer caption copy “${suppliedCopy.slice(0, 70)}${suppliedCopy.length > 70 ? '…' : ''}” on screen; replace it with this shorter hook.` : 'Use the emptier side of the frame so the subject remains unobstructed.'}`
   });
-  edits.push({
-    id: 'transition-style', timestampRange: 'Between key shots', type: 'cut', severity: 'recommended',
-    issue: ko ? `장면 사이의 연결 방식이 통일되면 영상이 더 의도적으로 보입니다.` : `The reel will feel more intentional if its shot changes follow one visual rule.`,
-    solution: ko
-      ? `${activeVideo ? '효과 전환을 빼고 움직임이 이어지는 하드컷 또는 매치컷을 사용하세요.' : '정적인 장면 사이에는 가벼운 펀치인이나 다른 앵글을 사용하세요.'} 가장 큰 변화 장면에는 “핵심 변화”라고 표시하세요.`
-      : `${activeVideo ? 'Remove decorative transitions; use hard cuts or motion-matched cuts.' : 'Use a gentle punch-in or alternate angle between quieter shots.'} Label the strongest visual change “Key change.”`
+  if (activeVideo && (m?.sceneCutScore ?? 0) >= 35) edits.push({
+    id: 'busy-cuts', timestampRange: 'Fastest shot sequence', type: 'cut', severity: 'recommended',
+    issue: ko ? '이 영상은 이미 화면 전환이 잦아 추가 효과 전환을 넣으면 피사체보다 편집이 먼저 보일 수 있습니다.' : 'This upload already changes shots frequently, so added transition effects would compete with the subject.',
+    solution: ko ? '가장 큰 움직임 직전에는 효과를 넣지 말고 동작 방향이 이어지는 하드컷을 사용하세요. 그 컷의 화면 문구는 “여기가 핵심”만 남기세요.' : 'Before the largest movement, skip the effect and use a hard cut that continues the direction of motion. Keep only “This is the key change” on that shot.'
+  });
+  if (!activeVideo || staticDuration >= .8) edits.push({
+    id: 'transition-style', timestampRange: 'Longest visual hold', type: 'cut', severity: staticDuration >= 1.5 ? 'critical' : 'recommended',
+    issue: ko ? '같은 구도와 밝기가 이어지는 부분에서 새 정보가 없어 영상이 멈춘 듯 보입니다.' : 'The longest stretch keeps the same composition and lighting without new visual information, so it feels stalled.',
+    solution: ko ? '그 정지 구간이 시작되는 지점에서 가까운 디테일 컷이나 다른 앵글로 하드컷하세요. 대체 컷이 없다면 피사체 쪽으로 천천히 펀치인하고 “이 부분을 보세요”를 피사체 옆에 넣으세요.' : 'At the start of that hold, hard-cut to a close detail or alternate angle. If no second shot exists, slowly punch in toward the subject and place “Watch this detail” beside it.'
   });
   if ((m?.earlyMotionScore ?? 0) < 55) edits.push({ id: 'opening', timestampRange: 'Opening', type: 'hook', severity: (m?.earlyMotionScore ?? 0) < 18 ? 'critical' : 'recommended', issue: ko ? `첫 화면의 움직임이 약해 변화가 시작되기 전에 이탈할 수 있습니다.` : `The opening frame changes too slowly, so viewers may leave before the visual action begins.`, solution: ko ? `첫 화면을 영상에서 가장 변화가 큰 컷으로 교체하고 중앙에 “무엇이 달라졌을까요?”를 크게 표시하세요.` : `Replace the first frame with the strongest change shot and overlay “What changed here?” in the center.` });
-  if (m && staticDuration >= .8) edits.push({ id: 'static', timestampRange: 'Longest hold', type: 'pacing', severity: staticDuration >= 1.5 ? 'critical' : 'recommended', issue: ko ? `같은 화면이 오래 유지되어 시각적 진행이 멈춰 보입니다.` : `One visual state holds too long, making the reel feel paused rather than progressing.`, solution: ko ? `이 부분을 점프컷으로 줄이세요. 컷을 유지해야 한다면 가벼운 펀치인이나 다른 앵글을 넣고 “여기서 달라집니다”라고 표시하세요.` : `Shorten this hold with a jump cut. If it must remain, add a gentle punch-in or alternate angle and write “Here’s what changes.”` });
   if ((m?.payoffChangeScore ?? 0) < 55) edits.push({ id: 'payoff', timestampRange: 'Ending', type: 'payoff', severity: (m?.payoffChangeScore ?? 0) < 18 ? 'critical' : 'recommended', issue: ko ? `마지막 화면이 앞 장면과 충분히 구분되지 않아 결과가 약하게 보입니다.` : `The ending does not separate clearly enough from the preceding visuals, weakening the result.` , solution: ko ? `가장 변화가 큰 장면에서 마지막 결과로 하드컷하고 화면에는 “최종 결과” 또는 “전 / 후”만 표시하세요.` : `Hard-cut from the strongest-change shot to the final result. Use only “Final result” or “Before / After” on screen.` });
   if ((m?.loopSimilarityScore ?? 0) < 70) edits.push({ id: 'loop', timestampRange: `${sec(duration - Math.min(1.5, duration / 4))}–${sec(duration)}`, type: 'cut', severity: 'recommended', issue: ko ? `첫 화면과 마지막 화면의 구도·밝기 차이가 커서 반복 재생 시 끊겨 보입니다.` : `The first and final frames differ enough in composition and brightness to make replay feel abrupt.`, solution: ko ? `마지막 컷을 첫 프레임과 같은 크롭과 피사체 위치로 맞추고, 밝기를 첫 화면 수준으로 보정한 뒤 매치컷으로 연결하세요.` : `Re-crop the final shot to match the first frame’s subject position, match its brightness, and connect them with a match cut.` });
   if (m && (m.sharpnessScore < 38 || m.exposureStabilityScore < 55)) edits.push({ id: 'quality', timestampRange: 'Soft or dark shots', type: 'safezone', severity: 'recommended', issue: ko ? '일부 장면은 흐리거나 어두워 피사체가 배경에서 분리되지 않습니다.' : 'Some shots look soft or dark enough for the subject to blend into the background.', solution: ko ? '해당 장면만 밝히고 피사체의 대비를 높이세요. 전체 영상에 같은 필터를 적용하지 마세요.' : 'Brighten only those shots and add contrast around the subject; avoid one blanket filter over the whole reel.' });
@@ -112,10 +118,10 @@ export function createLocalEvaluation(input: AuditInput): ReelEvaluation {
   if (!edits.length) edits.push({ id: 'refine', timestampRange: `${sec(Math.max(0, strongestTime - .5))}–${sec(Math.min(duration, strongestTime + .5))}`, type: 'pacing', severity: 'optional', issue: ko ? `${sec(strongestTime)}에서 이 파일의 최대 시각 변화가 측정됐고 치명적 결함은 없습니다.` : `This file's strongest visual change occurs at ${sec(strongestTime)}; no critical measured defect was found.`, solution: ko ? `이 변화 전후 0.5초의 컷 길이는 유지하고, 다른 구간만 조정해 현재 리듬 피크를 보존하세요.` : `Preserve the half-second on each side of this transition and adjust other intervals so this upload's rhythm peak remains intact.` });
   edits.push({
     id: 'payoff-card', timestampRange: 'Final result frame', type: 'payoff', severity: 'recommended',
-    issue: ko ? `마지막 장면에는 ${subject}의 결과를 즉시 이해시키는 마감 문구가 필요합니다.` : `The ending needs a clear finish line that explains the result of ${subject} at a glance.`,
+    issue: ko ? `이 업로드의 마지막 화면만으로는 ${shortSubject}의 결과와 다음 행동이 동시에 분명하지 않습니다.` : `The final image in this upload does not clearly communicate both the result of ${shortSubject} and the next action.`,
     solution: ko
-      ? `마지막 결과 프레임에 “${subject} — 최종 결과”를 표시하세요. 그 아래 작은 글씨로 “어떤 변화가 가장 좋았나요?”를 넣으세요.`
-      : `Overlay “${subject} — final result” on the final shot. Add “Which change worked best?” underneath in smaller text.`
+      ? `마지막 결과 프레임에는 “${shortSubject} — 최종 결과”를 크게 쓰고, 그 아래에 “어떤 장면이 가장 눈에 띄었나요?”를 작게 넣으세요. 첫 훅과 같은 글꼴·색을 사용해 하나의 영상처럼 마무리하세요.`
+      : `On this upload’s final result shot, write “${shortSubject} — final result” prominently, with “Which shot caught your eye?” beneath it. Reuse the opening hook’s type and color so the reel feels intentionally closed.`
   });
 
   const paceTag = (m?.changeFrequencyScore ?? 0) >= 55 ? (ko ? '#빠른컷편집' : '#FastCutEditing') : (ko ? '#슬로우페이스영상' : '#SlowPacedVideo');

@@ -278,6 +278,10 @@ async function startServer() {
       const promptText = `You are a strictly objective, uncompromising Instagram Reels & Short-Form Video Algorithm Auditor in 2026.
 You are evaluating a Reel prior to publishing. Your evaluation MUST be strictly objective, critical, and evidence-based. 
 PROFESSIONAL EVALUATION MANDATE:
+- Treat the attached chronological frames as the sole source of visual recommendations for this upload. Never reuse a stock observation, hook, CTA, transition, or editing template that is not justified by something visible in these frames or by the supplied caption/concept.
+- Every actionable edit must name the visible shot or visual condition that triggered it (opening subject, longest unchanged composition, strongest visual change, darkest/softest shot, or final result frame). Say exactly what to replace, where to place text relative to the visible subject/empty space, and which cut or transition to use.
+- When recommending on-screen copy, provide the exact replacement wording. If readable text is visible in a supplied frame, quote only the relevant short fragment and propose a purpose-specific replacement. If text is not legible, explicitly describe the recommendation as new overlay copy; never pretend to have read it.
+- Do not recommend a transition merely because transitions are generally useful. Recommend one only at an observed hold, composition change, motion change, reveal, or ending-to-opening loop point in this specific upload.
 - Use only measurable visual evidence, supplied context, and the rubric below. Do not infer facts that are not visible or provided.
 - Separate observations from predictions. Never present an algorithm forecast as a verified outcome.
 - Do not give polite, promotional, or artificially inflated ratings, but do not manufacture deductions merely to appear strict. Apply identical evidence thresholds to every creator and niche.
