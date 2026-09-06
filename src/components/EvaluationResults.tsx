@@ -1,5 +1,4 @@
 import React, { useEffect, useState } from 'react';
-import confetti from 'canvas-confetti';
 import {
   Award,
   Zap,
@@ -16,7 +15,6 @@ import {
   ShieldCheck,
   MessageCircle,
   Hash,
-  RefreshCw,
   Lightbulb,
   Info,
   AlertCircle,
@@ -41,25 +39,6 @@ export const EvaluationResults: React.FC<EvaluationResultsProps> = ({
   const [customTopic, setCustomTopic] = useState<string>(evaluation.videoConcept || evaluation.title || '');
   const [generatedCaptions, setGeneratedCaptions] = useState<any>(null);
   const [isGeneratingCaptions, setIsGeneratingCaptions] = useState<boolean>(false);
-
-  // Trigger confetti celebration on high score!
-  useEffect(() => {
-    if (evaluation.overallStars >= 4.2) {
-      try {
-        const confettiInstance = confetti.create(undefined, {
-          useWorker: false,
-          resize: true,
-        });
-        confettiInstance({
-          particleCount: 70,
-          spread: 60,
-          origin: { y: 0.6 },
-        });
-      } catch (err) {
-        console.warn('Confetti effect error prevented:', err);
-      }
-    }
-  }, [evaluation]);
 
   const copyToClipboard = (text: string, label: string) => {
     navigator.clipboard.writeText(text);
@@ -157,53 +136,16 @@ export const EvaluationResults: React.FC<EvaluationResultsProps> = ({
       {/* 1. Overall Evaluation Hero Header */}
       <div className="bg-white border border-gray-100 rounded-2xl p-6 shadow-sm relative overflow-hidden text-slate-800">
         <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-6 relative z-10">
-          {/* Left: Overall Quality Score */}
+          {/* Left: viewer-facing creative summary */}
           <div className="flex items-center gap-5">
-            <div className="flex flex-col items-center justify-center bg-slate-50 border border-gray-200 rounded-2xl p-4 shadow-sm min-w-[120px]">
-              <span className="text-4xl font-extrabold text-slate-900 font-sans tracking-tight">
-                {evaluation.overallStars.toFixed(1)}
-              </span>
-              <StarRating rating={evaluation.overallStars} size="sm" showNumeric={false} className="mt-1" />
-              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">
-                {t('outOf5')}
-              </span>
-            </div>
-
             <div className="space-y-1.5">
-              <div className="flex items-center gap-2 flex-wrap">
-                <span className={`px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider border ${getVerdictBadge(evaluation.overallVerdict)}`}>
-                  {getVerdictLabel(evaluation.overallVerdict)}
-                </span>
-                <span className="text-xs font-semibold text-slate-500">
-                  {t('overallScoreLabel')}{' '}
-                  <span className="text-indigo-600 font-extrabold">{evaluation.overallScorePercent}%</span>
-                </span>
-              </div>
               <h2 className="text-2xl font-bold text-slate-900 tracking-tight">
                 {evaluation.title || (language === 'ko' ? '진단된 릴스' : 'Evaluated Reel')}
               </h2>
               <p className="text-xs text-slate-500 flex items-center gap-2 flex-wrap">
                 <span>{evaluation.niche}</span>
                 <span>•</span>
-                <span>{evaluation.durationSeconds}{language === 'ko' ? '초 재생' : 's duration'}</span>
-                <span>•</span>
                 <span>{evaluation.fileFormat}</span>
-                {evaluation.versionTag && (
-                  <span className="px-2 py-0.5 bg-indigo-50 text-indigo-700 rounded text-[10px] font-bold border border-indigo-100">
-                    {evaluation.versionTag}
-                  </span>
-                )}
-                {evaluation.isCachedEvaluation && (
-                  <span
-                    className="px-2.5 py-0.5 bg-amber-50 text-amber-800 rounded text-[10px] font-bold border border-amber-200 flex items-center gap-1"
-                  >
-                    <RefreshCw className="w-3 h-3 text-amber-600" />
-                    {language === 'ko' ? '동일 영상 고정 평점' : 'Static Rating (Exact Match)'}
-                  </span>
-                )}
-                <span className="px-2 py-0.5 bg-slate-100 text-slate-600 rounded text-[10px] font-semibold border border-slate-200">
-                  {language === 'ko' ? '가중치 루브릭 적용' : 'Objective Weighted Rubric'}
-                </span>
               </p>
 
               {evaluation.videoConcept && (
@@ -244,7 +186,7 @@ export const EvaluationResults: React.FC<EvaluationResultsProps> = ({
           <div className="mt-4 bg-rose-50/90 border border-rose-200 rounded-2xl p-4 space-y-2">
             <div className="flex items-center gap-2 text-rose-800 font-bold text-xs uppercase tracking-wider">
               <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0" />
-              <span>{t('defectsTitle')} ({evaluation.criticalDefectsIdentified.length})</span>
+              <span>{language === 'ko' ? '시청자가 흥미를 잃을 수 있는 부분' : 'What may lose the viewer'}</span>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm leading-relaxed text-rose-950 font-medium">
               {evaluation.criticalDefectsIdentified.map((defect, i) => (
@@ -257,8 +199,8 @@ export const EvaluationResults: React.FC<EvaluationResultsProps> = ({
           </div>
         )}
 
-        {/* 2. Key Metrics Bar */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-6 pt-6 border-t border-gray-100">
+        {/* Numeric metrics remain internal; the report is intentionally advice-first. */}
+        {false && <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-6 pt-6 border-t border-gray-100">
           {/* Expected Skip Rate */}
           <div className="bg-slate-50/80 border border-gray-100 rounded-2xl p-4 flex flex-col justify-between">
             <div className="flex items-center justify-between text-xs text-slate-500 font-bold uppercase tracking-wider mb-1">
@@ -320,17 +262,17 @@ export const EvaluationResults: React.FC<EvaluationResultsProps> = ({
               <span className="text-[10px] text-slate-400 font-medium">{t('shareRate')}</span>
             </div>
           </div>
-        </div>
+        </div>}
       </div>
 
-      {/* 3. 5-Star Critical Aspect Rating Matrix */}
+      {/* Viewer-facing creative observations */}
       <div className="bg-white border border-gray-100 rounded-2xl p-6 shadow-sm space-y-4">
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 border-b border-gray-100 pb-4">
           <div>
             <h3 className="text-lg font-bold text-slate-900 flex items-center gap-2">
-              <Layers className="w-5 h-5 text-indigo-600" /> {t('aspectMatrixTitle')}
+              <Layers className="w-5 h-5 text-indigo-600" /> {language === 'ko' ? '시청자가 실제로 보게 될 것' : 'What the viewer will notice'}
             </h3>
-            <p className="text-xs text-slate-500">{t('aspectMatrixSub')}</p>
+            <p className="text-xs text-slate-500">{language === 'ko' ? '화면에서 보이는 인상과 바로 적용할 수 있는 개선점' : 'Visible impressions and practical changes you can make'}</p>
           </div>
         </div>
 
@@ -340,12 +282,11 @@ export const EvaluationResults: React.FC<EvaluationResultsProps> = ({
             <div>
               <div className="flex items-start justify-between gap-2 mb-2">
                 <span className="px-2 py-0.5 bg-indigo-50 text-indigo-700 border border-indigo-100 rounded text-[10px] font-extrabold uppercase">
-                  {language === 'ko' ? '0-3초 훅' : '0-3s Hook'}
+                  {language === 'ko' ? '첫인상' : 'Opening impression'}
                 </span>
-                <StarRating rating={evaluation.aspects.hookStrength.stars} size="sm" />
               </div>
               <h4 className="font-bold text-sm text-slate-900 mb-1">
-                {language === 'ko' ? '0초 스크롤 방지 훅' : evaluation.aspects.hookStrength.label}
+                {language === 'ko' ? '스크롤을 멈추게 할 첫 화면' : evaluation.aspects.hookStrength.label}
               </h4>
               <p className="text-sm text-slate-700 leading-relaxed mb-3">
                 {evaluation.aspects.hookStrength.verdict}
@@ -364,7 +305,6 @@ export const EvaluationResults: React.FC<EvaluationResultsProps> = ({
                 <span className="px-2 py-0.5 bg-blue-50 text-blue-700 border border-blue-100 rounded text-[10px] font-extrabold uppercase">
                   {language === 'ko' ? '편집 페이싱' : 'Pacing & Cuts'}
                 </span>
-                <StarRating rating={evaluation.aspects.pacingAndStimulation.stars} size="sm" />
               </div>
               <h4 className="font-bold text-sm text-slate-900 mb-1">
                 {language === 'ko' ? '화면 전환 및 페이싱' : evaluation.aspects.pacingAndStimulation.label}
@@ -373,7 +313,7 @@ export const EvaluationResults: React.FC<EvaluationResultsProps> = ({
                 {evaluation.aspects.pacingAndStimulation.verdict}
               </p>
             </div>
-            <div className="space-y-1 text-[11px] bg-white p-2.5 rounded-xl border border-gray-100 text-slate-600">
+            {false && <div className="space-y-1 text-[11px] bg-white p-2.5 rounded-xl border border-gray-100 text-slate-600">
               <div className="flex justify-between">
                 <span className="text-slate-500">{t('avgCutFreq')}</span>
                 <span className="font-bold text-indigo-600">{evaluation.aspects.pacingAndStimulation.avgCutFrequencySec}s</span>
@@ -382,7 +322,7 @@ export const EvaluationResults: React.FC<EvaluationResultsProps> = ({
                 <span className="text-slate-500">{t('deadAirDetected')}</span>
                 <span className="font-bold text-amber-600">{evaluation.aspects.pacingAndStimulation.deadAirDetectedSec}s</span>
               </div>
-            </div>
+            </div>}
           </div>
 
           {/* Pillar 3: Narrative Arc & Payoff */}
@@ -392,7 +332,6 @@ export const EvaluationResults: React.FC<EvaluationResultsProps> = ({
                 <span className="px-2 py-0.5 bg-amber-50 text-amber-700 border border-amber-100 rounded text-[10px] font-extrabold uppercase">
                   {language === 'ko' ? '스토리 결말' : 'Payoff Arc'}
                 </span>
-                <StarRating rating={evaluation.aspects.narrativeAndPayoff.stars} size="sm" />
               </div>
               <h4 className="font-bold text-sm text-slate-900 mb-1">
                 {language === 'ko' ? '스토리 전개 및 결말 피날레' : evaluation.aspects.narrativeAndPayoff.label}
@@ -401,7 +340,7 @@ export const EvaluationResults: React.FC<EvaluationResultsProps> = ({
                 {evaluation.aspects.narrativeAndPayoff.verdict}
               </p>
             </div>
-            <div className="space-y-1 text-[11px] bg-white p-2.5 rounded-xl border border-gray-100 text-slate-600">
+            {false && <div className="space-y-1 text-[11px] bg-white p-2.5 rounded-xl border border-gray-100 text-slate-600">
               <div className="flex justify-between">
                 <span className="text-slate-500">{t('setupDuration')}</span>
                 <span className="font-bold text-slate-800">{evaluation.aspects.narrativeAndPayoff.setupDurationSec}s</span>
@@ -410,7 +349,7 @@ export const EvaluationResults: React.FC<EvaluationResultsProps> = ({
                 <span className="text-slate-500">{t('payoffDelivery')}</span>
                 <span className="font-bold text-green-600">{evaluation.aspects.narrativeAndPayoff.payoffTimingSec}s</span>
               </div>
-            </div>
+            </div>}
           </div>
 
           {/* Pillar 4: Looping & Retention */}
@@ -420,7 +359,6 @@ export const EvaluationResults: React.FC<EvaluationResultsProps> = ({
                 <span className="px-2 py-0.5 bg-indigo-50 text-indigo-700 border border-indigo-100 rounded text-[10px] font-extrabold uppercase">
                   {language === 'ko' ? '루프 연결성' : 'Seamless Loop'}
                 </span>
-                <StarRating rating={evaluation.aspects.loopingAndRetention.stars} size="sm" />
               </div>
               <h4 className="font-bold text-sm text-slate-900 mb-1">
                 {language === 'ko' ? '반복 재생(루프) 자연스러움' : evaluation.aspects.loopingAndRetention.label}
@@ -429,7 +367,7 @@ export const EvaluationResults: React.FC<EvaluationResultsProps> = ({
                 {evaluation.aspects.loopingAndRetention.verdict}
               </p>
             </div>
-            <div className="space-y-1 text-[11px] bg-white p-2.5 rounded-xl border border-gray-100 text-slate-600">
+            {false && <div className="space-y-1 text-[11px] bg-white p-2.5 rounded-xl border border-gray-100 text-slate-600">
               <div className="flex justify-between">
                 <span className="text-slate-500">{t('loopContinuity')}</span>
                 <span className="font-bold text-indigo-600">{evaluation.aspects.loopingAndRetention.seamlessLoopScore}%</span>
@@ -442,7 +380,7 @@ export const EvaluationResults: React.FC<EvaluationResultsProps> = ({
                     : (language === 'ko' ? '없음' : 'None')}
                 </span>
               </div>
-            </div>
+            </div>}
           </div>
 
           {/* Pillar 5: Technical Compliance */}
@@ -452,7 +390,6 @@ export const EvaluationResults: React.FC<EvaluationResultsProps> = ({
                 <span className="px-2 py-0.5 bg-green-50 text-green-700 border border-green-100 rounded text-[10px] font-extrabold uppercase">
                   {language === 'ko' ? '기술 규격 & 안전지대' : 'Technical & Safe Zones'}
                 </span>
-                <StarRating rating={evaluation.aspects.technicalCompliance.stars} size="sm" />
               </div>
               <h4 className="font-bold text-sm text-slate-900 mb-1">
                 {language === 'ko' ? '기술 규격 및 자막 안전지대' : evaluation.aspects.technicalCompliance.label}
@@ -461,12 +398,12 @@ export const EvaluationResults: React.FC<EvaluationResultsProps> = ({
                 {evaluation.aspects.technicalCompliance.verdict}
               </p>
             </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm leading-relaxed bg-white p-3 rounded-xl border border-gray-100 text-slate-700">
+            {false && <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm leading-relaxed bg-white p-3 rounded-xl border border-gray-100 text-slate-700">
               <div><strong className="text-slate-800">{t('resolutionLabel')}</strong> {evaluation.aspects.technicalCompliance.resolutionText}</div>
               <div><strong className="text-slate-800">{t('watermarkLabel')}</strong> {evaluation.aspects.technicalCompliance.watermarkDetected == null ? (language === 'ko' ? '확인 불가' : 'Not verified') : evaluation.aspects.technicalCompliance.watermarkDetected ? (language === 'ko' ? '감지됨 (제거 권장)' : 'Detected') : (language === 'ko' ? '없음 (양호)' : 'Clean')}</div>
               <div><strong className="text-slate-800">{t('safeZonesLabel')}</strong> {evaluation.aspects.technicalCompliance.safeZoneViolation == null ? (language === 'ko' ? '확인 불가' : 'Not verified') : evaluation.aspects.technicalCompliance.safeZoneViolation ? (language === 'ko' ? '침범 감지됨' : 'Violation detected') : (language === 'ko' ? '올바르게 정렬됨' : 'Aligned correctly')}</div>
               <div><strong className="text-slate-800">{t('captionsLabel')}</strong> {evaluation.aspects.technicalCompliance.captionQuality}</div>
-            </div>
+            </div>}
           </div>
         </div>
       </div>
@@ -574,9 +511,6 @@ export const EvaluationResults: React.FC<EvaluationResultsProps> = ({
               {t('actionableEditsSub')}
             </p>
           </div>
-          <span className="px-2.5 py-1 bg-indigo-50 text-indigo-700 border border-indigo-100 rounded-full text-xs font-bold">
-            {evaluation.actionableEdits.length}{t('suggestedEdits')}
-          </span>
         </div>
 
         <div className="space-y-3">
@@ -602,7 +536,6 @@ export const EvaluationResults: React.FC<EvaluationResultsProps> = ({
                     <span className="text-sm font-extrabold text-slate-900">
                       {language === 'ko' ? `${getTypeLabel(edit.type)}에서 바꿀 점` : `Visible ${getTypeLabel(edit.type)} change`}
                     </span>
-                    <span className="ml-auto px-2.5 py-1 bg-white text-slate-500 border border-gray-200 rounded-lg text-xs font-mono font-bold">{edit.timestampRange}</span>
                   </div>
                   <div className="rounded-xl bg-white border border-gray-200 p-3">
                     <span className="block text-xs font-bold uppercase tracking-wide text-slate-500 mb-1">{language === 'ko' ? '왜 바꿔야 하나요?' : 'Why it needs changing'}</span>
@@ -651,7 +584,7 @@ export const EvaluationResults: React.FC<EvaluationResultsProps> = ({
           {/* Top 3 Alternative Hooks */}
           <div className="bg-slate-50 border border-gray-100 rounded-2xl p-4 space-y-3">
             <h4 className="text-xs font-bold text-slate-700 uppercase tracking-wider flex items-center gap-1.5">
-              <Zap className="w-4 h-4 text-indigo-600" /> {t('recommendedHooks')}
+              <Zap className="w-4 h-4 text-indigo-600" /> {language === 'ko' ? '화면 훅 문구 아이디어' : 'On-screen hook ideas'}
             </h4>
             <div className="space-y-2">
               {evaluation.captionOptimization.recommendedHooks.map((hook, i) => (
