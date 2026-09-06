@@ -246,7 +246,7 @@ export const EvaluationResults: React.FC<EvaluationResultsProps> = ({
               <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0" />
               <span>{t('defectsTitle')} ({evaluation.criticalDefectsIdentified.length})</span>
             </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-xs text-rose-950 font-medium">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm leading-relaxed text-rose-950 font-medium">
               {evaluation.criticalDefectsIdentified.map((defect, i) => (
                 <div key={i} className="flex items-start gap-2 bg-white/90 p-2.5 rounded-xl border border-rose-200 shadow-2xs">
                   <span className="text-rose-600 font-bold shrink-0">•</span>
@@ -347,11 +347,11 @@ export const EvaluationResults: React.FC<EvaluationResultsProps> = ({
               <h4 className="font-bold text-sm text-slate-900 mb-1">
                 {language === 'ko' ? '0초 스크롤 방지 훅' : evaluation.aspects.hookStrength.label}
               </h4>
-              <p className="text-xs text-slate-500 leading-relaxed mb-3">
+              <p className="text-sm text-slate-700 leading-relaxed mb-3">
                 {evaluation.aspects.hookStrength.verdict}
               </p>
             </div>
-            <div className="space-y-1 text-[11px] bg-white p-2.5 rounded-xl border border-gray-100 text-slate-600">
+            <div className="space-y-2 text-sm leading-relaxed bg-white p-3 rounded-xl border border-gray-100 text-slate-700">
               <div><strong className="text-slate-800">{language === 'ko' ? '시각 훅:' : 'Visual:'}</strong> {evaluation.aspects.hookStrength.visualHook}</div>
               <div><strong className="text-slate-800">{language === 'ko' ? '자막 훅:' : 'Text:'}</strong> {evaluation.aspects.hookStrength.textHook}</div>
             </div>
@@ -369,7 +369,7 @@ export const EvaluationResults: React.FC<EvaluationResultsProps> = ({
               <h4 className="font-bold text-sm text-slate-900 mb-1">
                 {language === 'ko' ? '화면 전환 및 페이싱' : evaluation.aspects.pacingAndStimulation.label}
               </h4>
-              <p className="text-xs text-slate-500 leading-relaxed mb-3">
+              <p className="text-sm text-slate-700 leading-relaxed mb-3">
                 {evaluation.aspects.pacingAndStimulation.verdict}
               </p>
             </div>
@@ -397,7 +397,7 @@ export const EvaluationResults: React.FC<EvaluationResultsProps> = ({
               <h4 className="font-bold text-sm text-slate-900 mb-1">
                 {language === 'ko' ? '스토리 전개 및 결말 피날레' : evaluation.aspects.narrativeAndPayoff.label}
               </h4>
-              <p className="text-xs text-slate-500 leading-relaxed mb-3">
+              <p className="text-sm text-slate-700 leading-relaxed mb-3">
                 {evaluation.aspects.narrativeAndPayoff.verdict}
               </p>
             </div>
@@ -425,7 +425,7 @@ export const EvaluationResults: React.FC<EvaluationResultsProps> = ({
               <h4 className="font-bold text-sm text-slate-900 mb-1">
                 {language === 'ko' ? '반복 재생(루프) 자연스러움' : evaluation.aspects.loopingAndRetention.label}
               </h4>
-              <p className="text-xs text-slate-500 leading-relaxed mb-3">
+              <p className="text-sm text-slate-700 leading-relaxed mb-3">
                 {evaluation.aspects.loopingAndRetention.verdict}
               </p>
             </div>
@@ -457,11 +457,11 @@ export const EvaluationResults: React.FC<EvaluationResultsProps> = ({
               <h4 className="font-bold text-sm text-slate-900 mb-1">
                 {language === 'ko' ? '기술 규격 및 자막 안전지대' : evaluation.aspects.technicalCompliance.label}
               </h4>
-              <p className="text-xs text-slate-500 leading-relaxed mb-3">
+              <p className="text-sm text-slate-700 leading-relaxed mb-3">
                 {evaluation.aspects.technicalCompliance.verdict}
               </p>
             </div>
-            <div className="grid grid-cols-2 gap-2 text-[11px] bg-white p-2.5 rounded-xl border border-gray-100 text-slate-600">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm leading-relaxed bg-white p-3 rounded-xl border border-gray-100 text-slate-700">
               <div><strong className="text-slate-800">{t('resolutionLabel')}</strong> {evaluation.aspects.technicalCompliance.resolutionText}</div>
               <div><strong className="text-slate-800">{t('watermarkLabel')}</strong> {evaluation.aspects.technicalCompliance.watermarkDetected == null ? (language === 'ko' ? '확인 불가' : 'Not verified') : evaluation.aspects.technicalCompliance.watermarkDetected ? (language === 'ko' ? '감지됨 (제거 권장)' : 'Detected') : (language === 'ko' ? '없음 (양호)' : 'Clean')}</div>
               <div><strong className="text-slate-800">{t('safeZonesLabel')}</strong> {evaluation.aspects.technicalCompliance.safeZoneViolation == null ? (language === 'ko' ? '확인 불가' : 'Not verified') : evaluation.aspects.technicalCompliance.safeZoneViolation ? (language === 'ko' ? '침범 감지됨' : 'Violation detected') : (language === 'ko' ? '올바르게 정렬됨' : 'Aligned correctly')}</div>
@@ -472,7 +472,7 @@ export const EvaluationResults: React.FC<EvaluationResultsProps> = ({
       </div>
 
       {/* Stance-by-Stance Playbook for Captionless / Un-captioned Reels */}
-      {evaluation.stanceByStanceGuidance && evaluation.stanceByStanceGuidance.length > 0 && (
+      {false && evaluation.stanceByStanceGuidance && evaluation.stanceByStanceGuidance.length > 0 && (
         <div className="bg-slate-900 text-white border border-slate-800 rounded-2xl p-6 shadow-xl space-y-5 relative overflow-hidden">
           <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-3 border-b border-slate-800 pb-4">
             <div>
@@ -583,13 +583,10 @@ export const EvaluationResults: React.FC<EvaluationResultsProps> = ({
           {evaluation.actionableEdits.map((edit, idx) => (
             <div
               key={edit.id || idx}
-              className="bg-slate-50 border border-gray-100 rounded-2xl p-4 flex flex-col md:flex-row items-start md:items-center justify-between gap-4 hover:border-gray-200 transition-all"
+              className="bg-slate-50 border border-gray-200 rounded-2xl p-5 flex flex-col md:flex-row items-start justify-between gap-4 hover:border-indigo-200 transition-all"
             >
-              <div className="flex items-start gap-3">
-                <span className="px-2.5 py-1 bg-white text-indigo-600 border border-gray-200 rounded-lg text-xs font-mono font-bold shrink-0">
-                  {edit.timestampRange}
-                </span>
-                <div className="space-y-1">
+              <div className="flex items-start gap-3 w-full">
+                <div className="space-y-3 w-full">
                   <div className="flex items-center gap-2">
                     <span
                       className={`px-2 py-0.2 rounded text-[10px] font-bold uppercase ${
@@ -602,15 +599,19 @@ export const EvaluationResults: React.FC<EvaluationResultsProps> = ({
                     >
                       {getSeverityLabel(edit.severity)}
                     </span>
-                    <span className="text-xs font-bold text-slate-700 uppercase tracking-wider">
-                      {getTypeLabel(edit.type)} {t('fixLabel')}
+                    <span className="text-sm font-extrabold text-slate-900">
+                      {language === 'ko' ? `${getTypeLabel(edit.type)}에서 바꿀 점` : `Visible ${getTypeLabel(edit.type)} change`}
                     </span>
+                    <span className="ml-auto px-2.5 py-1 bg-white text-slate-500 border border-gray-200 rounded-lg text-xs font-mono font-bold">{edit.timestampRange}</span>
                   </div>
-                  <p className="text-xs text-slate-700 font-medium">{edit.issue}</p>
-                  <p className="text-xs text-green-700 font-semibold flex items-center gap-1">
-                    <CheckCircle2 className="w-3.5 h-3.5 text-green-600 shrink-0" />
-                    {t('solutionLabel')} {edit.solution}
-                  </p>
+                  <div className="rounded-xl bg-white border border-gray-200 p-3">
+                    <span className="block text-xs font-bold uppercase tracking-wide text-slate-500 mb-1">{language === 'ko' ? '왜 바꿔야 하나요?' : 'Why it needs changing'}</span>
+                    <p className="text-sm leading-relaxed text-slate-700 font-medium">{edit.issue}</p>
+                  </div>
+                  <div className="rounded-xl bg-green-50 border border-green-200 p-3">
+                    <span className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wide text-green-800 mb-1"><CheckCircle2 className="w-4 h-4" />{language === 'ko' ? '화면에서 이렇게 바꾸세요' : 'Make this visible change'}</span>
+                    <p className="text-base leading-relaxed text-green-950 font-semibold">{edit.solution}</p>
+                  </div>
                 </div>
               </div>
 
@@ -654,8 +655,8 @@ export const EvaluationResults: React.FC<EvaluationResultsProps> = ({
             </h4>
             <div className="space-y-2">
               {evaluation.captionOptimization.recommendedHooks.map((hook, i) => (
-                <div key={i} className="flex items-center justify-between gap-2 p-2.5 bg-white rounded-xl border border-gray-200 text-xs text-slate-800">
-                  <span className="font-medium">"{hook}"</span>
+                <div key={i} className="flex items-center justify-between gap-3 p-3 bg-white rounded-xl border border-gray-200 text-sm leading-relaxed text-slate-900">
+                  <span className="font-semibold">"{hook}"</span>
                   <button
                     onClick={() => copyToClipboard(hook, `hook-${i}`)}
                     className="p-1 hover:bg-slate-100 rounded text-slate-500 transition-colors"
@@ -674,19 +675,19 @@ export const EvaluationResults: React.FC<EvaluationResultsProps> = ({
             </h4>
 
             {/* Value CTA */}
-            <div className="p-2.5 bg-white rounded-xl border border-gray-200 text-xs space-y-1">
+            <div className="p-3 bg-white rounded-xl border border-gray-200 text-sm leading-relaxed space-y-1">
               <div className="text-[10px] font-bold text-green-700 uppercase">{t('valueCTA')}</div>
               <p className="text-slate-800 font-medium">{evaluation.captionOptimization.valueCTA}</p>
             </div>
 
             {/* Cliffhanger CTA */}
-            <div className="p-2.5 bg-white rounded-xl border border-gray-200 text-xs space-y-1">
+            <div className="p-3 bg-white rounded-xl border border-gray-200 text-sm leading-relaxed space-y-1">
               <div className="text-[10px] font-bold text-indigo-600 uppercase">{t('cliffhangerCTA')}</div>
               <p className="text-slate-800 font-medium">{evaluation.captionOptimization.cliffhangerCTA}</p>
             </div>
 
             {/* Comment Bait */}
-            <div className="p-2.5 bg-white rounded-xl border border-gray-200 text-xs space-y-1">
+            <div className="p-3 bg-white rounded-xl border border-gray-200 text-sm leading-relaxed space-y-1">
               <div className="text-[10px] font-bold text-blue-600 uppercase">{t('commentBait')}</div>
               <p className="text-slate-800 font-medium">{evaluation.captionOptimization.commentBaitQuestion}</p>
             </div>
