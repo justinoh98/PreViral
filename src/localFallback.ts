@@ -28,9 +28,10 @@ export function createLocalEvaluation(input: AuditInput): ReelEvaluation {
   const ko = input.language === 'ko';
   const noCaption = !input.captionInput.trim();
   const noConcept = !input.videoConcept.trim();
-  const niche = (input.niche || (ko ? '콘텐츠' : 'content')).trim();
-  const subject = (input.videoConcept || input.title || niche).trim();
   const suppliedCopy = input.captionInput.replace(/#[^\s#]+/g, '').trim();
+  const niche = (input.niche || (ko ? '콘텐츠' : 'content')).trim();
+  // A file name is only an upload label. Never use it as creative evidence.
+  const subject = (input.videoConcept || suppliedCopy || niche).trim();
   const shortSubject = subject.length > 54 ? `${subject.slice(0, 51).trim()}…` : subject;
   const duration = Math.max(1, input.durationSeconds);
   const f = (value: number | undefined, fallback = 35) => (value ?? fallback) / 100;

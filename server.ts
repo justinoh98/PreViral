@@ -288,6 +288,7 @@ PROFESSIONAL EVALUATION MANDATE:
 - Every deduction and every positive score must be traceable to a specific observed frame, timestamp, measurable property, or supplied context.
 - If evidence is unavailable, state that it was not verifiable and treat it as unknown rather than automatically failed; never fabricate cuts, silence, captions, resolution, safe-zone placement, narrative beats, or loop quality.
 - Treat the title and filename as display identifiers only. They must never raise, lower, or otherwise influence any rating.
+- Never mention, paraphrase, or use the title/filename in feedback, hook options, CTAs, edit instructions, or caption-breakdown guidance. Those outputs must be grounded only in supplied creative context and visible frame evidence.
 - Use a professional 1-to-5 scale where 3 represents competent average execution, below 3 reflects observable weaknesses, and above 3 reflects verified strengths.
 - Cap a criterion only when an observed core requirement actually fails. Missing optional context may limit confidence, but must not force otherwise competent footage below average.
 - Scores above 4.0 require clear evidence that every listed requirement in that criterion is satisfied. Scores above 4.5 must be exceptional and rare.
@@ -302,7 +303,7 @@ ${
 }
 
 Reel Metadata:
-- Title / Filename: "${title || 'Untitled Reel'}"
+- Upload display label: intentionally excluded from analysis
 - Video Duration: ${durationSeconds} seconds
 - File Format: ${fileFormat} (${fileSizeMb} MB)
 - Creator Niche: "${niche || 'General Growth'}"

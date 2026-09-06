@@ -36,7 +36,7 @@ export const EvaluationResults: React.FC<EvaluationResultsProps> = ({
   const { t, language } = useLanguage();
   const [copiedText, setCopiedText] = useState<string | null>(null);
   const [showCaptionsGenerator, setShowCaptionsGenerator] = useState<boolean>(false);
-  const [customTopic, setCustomTopic] = useState<string>(evaluation.videoConcept || evaluation.title || '');
+  const [customTopic, setCustomTopic] = useState<string>(evaluation.videoConcept || evaluation.captionInput || evaluation.niche || '');
   const [generatedCaptions, setGeneratedCaptions] = useState<any>(null);
   const [isGeneratingCaptions, setIsGeneratingCaptions] = useState<boolean>(false);
 
