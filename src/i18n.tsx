@@ -85,7 +85,7 @@ export const translations = {
 
     playbookTitle: 'Stance-by-Stance On-Screen Text & Hook Playbook',
     playbookBadge: 'Caption Breakdown Guidance',
-    playbookDesc: 'Because no caption or on-screen text hook was provided, your video was analyzed period-by-period. Select and copy text hook options and duration-based placement guidance for each stance window:',
+    playbookDesc: 'Your latest uploaded video is broken into practical caption periods. Choose and copy a text option, then follow the placement and editing guidance for that exact section:',
     optionADirect: 'Option A (Direct Value)',
     optionBCuriosity: 'Option B (Curiosity Gap)',
     optionCStory: 'Option C (Story / Bold Stance)',
@@ -230,7 +230,7 @@ export const translations = {
 
     playbookTitle: '구간별 화면 자막 & 훅 연출 가이드',
     playbookBadge: '자막 미입력 보완 가이드',
-    playbookDesc: '게시용 캡션이나 자막 문구가 입력되지 않아 릴스 구성을 구간별로 분석했습니다. 각 구간별 추천 훅 문구와 연출 위치 가이드를 참고하세요:',
+    playbookDesc: '최근 업로드한 영상을 실용적인 캡션 구간으로 나눴습니다. 각 구간의 문구를 선택해 복사하고, 해당 구간에 맞춘 배치와 편집 가이드를 적용하세요:',
     optionADirect: '옵션 A (직관적 가치 제공형)',
     optionBCuriosity: '옵션 B (호기심 유발형)',
     optionCStory: '옵션 C (강렬한 대립/스토리형)',

@@ -430,7 +430,7 @@ export const EvaluationResults: React.FC<EvaluationResultsProps> = ({
       </div>
 
       {/* Stance-by-Stance Playbook for Captionless / Un-captioned Reels */}
-      {false && evaluation.stanceByStanceGuidance && evaluation.stanceByStanceGuidance.length > 0 && (
+      {evaluation.stanceByStanceGuidance && evaluation.stanceByStanceGuidance.length > 0 && (
         <div className="bg-slate-900 text-white border border-slate-800 rounded-2xl p-6 shadow-xl space-y-5 relative overflow-hidden">
           <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-3 border-b border-slate-800 pb-4">
             <div>
@@ -532,16 +532,22 @@ export const EvaluationResults: React.FC<EvaluationResultsProps> = ({
               {t('actionableEditsSub')}
             </p>
           </div>
+          <span className="px-2.5 py-1 bg-indigo-50 text-indigo-700 border border-indigo-100 rounded-full text-xs font-bold">
+            {evaluation.actionableEdits.length}{t('suggestedEdits')}
+          </span>
         </div>
 
         <div className="space-y-3">
           {evaluation.actionableEdits.map((edit, idx) => (
             <div
               key={edit.id || idx}
-              className="bg-slate-50 border border-gray-200 rounded-2xl p-5 flex flex-col md:flex-row items-start justify-between gap-4 hover:border-indigo-200 transition-all"
+              className="bg-slate-50 border border-gray-100 rounded-2xl p-4 flex flex-col md:flex-row items-start md:items-center justify-between gap-4 hover:border-gray-200 transition-all"
             >
-              <div className="flex items-start gap-3 w-full">
-                <div className="space-y-3 w-full">
+              <div className="flex items-start gap-3">
+                <span className="px-2.5 py-1 bg-white text-indigo-600 border border-gray-200 rounded-lg text-xs font-mono font-bold shrink-0">
+                  {edit.timestampRange}
+                </span>
+                <div className="space-y-1">
                   <div className="flex items-center gap-2">
                     <span
                       className={`px-2 py-0.2 rounded text-[10px] font-bold uppercase ${
@@ -554,18 +560,15 @@ export const EvaluationResults: React.FC<EvaluationResultsProps> = ({
                     >
                       {getSeverityLabel(edit.severity)}
                     </span>
-                    <span className="text-sm font-extrabold text-slate-900">
-                      {language === 'ko' ? `${getTypeLabel(edit.type)}에서 바꿀 점` : `Visible ${getTypeLabel(edit.type)} change`}
+                    <span className="text-xs font-bold text-slate-700 uppercase tracking-wider">
+                      {getTypeLabel(edit.type)} {t('fixLabel')}
                     </span>
                   </div>
-                  <div className="rounded-xl bg-white border border-gray-200 p-3">
-                    <span className="block text-xs font-bold uppercase tracking-wide text-slate-500 mb-1">{language === 'ko' ? '왜 바꿔야 하나요?' : 'Why it needs changing'}</span>
-                    <p className="text-sm leading-relaxed text-slate-700 font-medium">{edit.issue}</p>
-                  </div>
-                  <div className="rounded-xl bg-green-50 border border-green-200 p-3">
-                    <span className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wide text-green-800 mb-1"><CheckCircle2 className="w-4 h-4" />{language === 'ko' ? '화면에서 이렇게 바꾸세요' : 'Make this visible change'}</span>
-                    <p className="text-base leading-relaxed text-green-950 font-semibold">{edit.solution}</p>
-                  </div>
+                  <p className="text-sm text-slate-700 font-medium leading-relaxed">{edit.issue}</p>
+                  <p className="text-sm text-green-700 font-semibold flex items-start gap-1 leading-relaxed">
+                    <CheckCircle2 className="w-4 h-4 text-green-600 shrink-0 mt-0.5" />
+                    <span>{t('solutionLabel')} {edit.solution}</span>
+                  </p>
                 </div>
               </div>
 
