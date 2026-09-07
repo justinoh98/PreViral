@@ -11,7 +11,7 @@ import {
   Bar,
   Legend,
 } from 'recharts';
-import { BarChart3, TrendingUp, Zap, Award, History, FileText } from 'lucide-react';
+import { BarChart3, TrendingUp, Zap, Award, History, FileText, Radio, Trophy, ArrowUpRight } from 'lucide-react';
 import { ReelEvaluation } from '../types';
 import { StarRating } from './StarRating';
 import { useLanguage } from '../i18n';
@@ -29,7 +29,8 @@ export const AnalyticsDashboard: React.FC<AnalyticsDashboardProps> = ({
   const [compareIds, setCompareIds] = useState<string[]>([]);
 
   // Format data for trends line chart
-  const trendData = history.map((item, idx) => ({
+  const chronologicalHistory = [...history].reverse();
+  const trendData = chronologicalHistory.map((item, idx) => ({
     name: item.title ? item.title.slice(0, 14) + '...' : `Reel #${idx + 1}`,
     stars: item.overallStars,
     skipRate: item.expectedSkipRatePercent,
@@ -42,6 +43,12 @@ export const AnalyticsDashboard: React.FC<AnalyticsDashboardProps> = ({
 
   // Aspect comparison bar data
   const latestReel = history[0];
+  const previousReel = history[1];
+  const averageScore = history.length
+    ? history.reduce((acc, curr) => acc + curr.overallStars, 0) / history.length
+    : 0;
+  const bestScore = history.length ? Math.max(...history.map((item) => item.overallStars)) : 0;
+  const latestDelta = latestReel && previousReel ? latestReel.overallStars - previousReel.overallStars : 0;
   const aspectData = latestReel
     ? [
         { aspect: language === 'ko' ? '0-3초 훅' : 'Hook (0-3s)', stars: latestReel.aspects.hookStrength.stars },
@@ -93,6 +100,9 @@ export const AnalyticsDashboard: React.FC<AnalyticsDashboardProps> = ({
               <BarChart3 className="w-5 h-5" />
             </span>
             <h2 className="text-xl font-bold text-slate-900">{t('analyticsTitle')}</h2>
+            <span className="inline-flex items-center gap-1 rounded-full border border-green-200 bg-green-50 px-2 py-1 text-[10px] font-bold uppercase tracking-wide text-green-700">
+              <Radio className="h-3 w-3" /> {language === 'ko' ? '평가 즉시 업데이트' : 'Updates after every audit'}
+            </span>
           </div>
           <p className="text-xs text-slate-500 mt-1">
             {t('analyticsSub')}
@@ -108,12 +118,25 @@ export const AnalyticsDashboard: React.FC<AnalyticsDashboardProps> = ({
           <div>
             <span className="text-slate-400 block text-[10px] uppercase font-bold tracking-wider">{t('avgQualityScore')}</span>
             <span className="text-amber-500 font-extrabold text-base">
-              {history.length > 0
-                ? (history.reduce((acc, curr) => acc + curr.overallStars, 0) / history.length).toFixed(1)
-                : '0.0'}
+              {averageScore.toFixed(1)}
               ★
             </span>
           </div>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+          <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wide text-slate-400"><Trophy className="h-4 w-4 text-amber-500" /> {language === 'ko' ? '최고 품질 점수' : 'Best quality score'}</div>
+          <div className="mt-2 text-2xl font-extrabold text-slate-900">{bestScore.toFixed(1)}<span className="text-sm text-slate-400"> / 5</span></div>
+        </div>
+        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+          <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wide text-slate-400"><ArrowUpRight className="h-4 w-4 text-indigo-500" /> {language === 'ko' ? '최근 변화' : 'Latest score change'}</div>
+          <div className={`mt-2 text-2xl font-extrabold ${latestDelta >= 0 ? 'text-green-600' : 'text-red-600'}`}>{history.length > 1 ? `${latestDelta >= 0 ? '+' : ''}${latestDelta.toFixed(1)}` : '—'}<span className="text-sm text-slate-400"> {history.length > 1 ? 'stars' : ''}</span></div>
+        </div>
+        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+          <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wide text-slate-400"><Zap className="h-4 w-4 text-violet-500" /> {language === 'ko' ? '최신 예상 비팔로워 도달' : 'Latest non-follower reach'}</div>
+          <div className="mt-2 text-2xl font-extrabold text-slate-900">{latestReel ? `${latestReel.followerGrowthPotentialPercent}%` : '—'}</div>
         </div>
       </div>
 
@@ -126,7 +149,7 @@ export const AnalyticsDashboard: React.FC<AnalyticsDashboardProps> = ({
               <TrendingUp className="w-4 h-4 text-indigo-600" /> {t('chartTrendTitle')}
             </h3>
             <span className="text-[11px] text-slate-400 font-medium">
-              {language === 'ko' ? '업로드 이력 기준' : 'Historical Uploads'}
+              {language === 'ko' ? '기기 저장 평가 이력' : 'Saved audit history'}
             </span>
           </div>
 
@@ -165,7 +188,7 @@ export const AnalyticsDashboard: React.FC<AnalyticsDashboardProps> = ({
               </ResponsiveContainer>
             ) : (
               <div className="flex items-center justify-center h-full text-slate-400 text-xs font-semibold">
-                {language === 'ko' ? '릴스를 업로드하면 성과 추이 그래프가 생성됩니다.' : 'Upload reels to generate performance trend line charts.'}
+                {language === 'ko' ? '릴스를 분석하면 품질 추이 그래프가 즉시 생성됩니다.' : 'Analyze a reel to generate an audit trend chart instantly.'}
               </div>
             )}
           </div>

@@ -16,6 +16,11 @@ interface VideoUploaderProps {
 }
 
 const EVALUATION_CACHE_VERSION = 12;
+const SUPPORTED_VIDEO_EXTENSIONS = new Set(['mp4', 'mov', 'avi', 'webm', 'mkv', 'm4v']);
+
+const getVideoExtension = (file: File) => file.name.split('.').pop()?.toLowerCase() || '';
+const isSupportedVideoFile = (file: File) =>
+  file.type.startsWith('video/') || SUPPORTED_VIDEO_EXTENSIONS.has(getVideoExtension(file));
 
 interface TimestampedFrameSnapshot {
   timeSec: number;
@@ -51,6 +56,7 @@ export const VideoUploader: React.FC<VideoUploaderProps> = ({
   const [videoConcept, setVideoConcept] = useState<string>('');
   const [audioType, setAudioType] = useState<string>('Trending Audio (Upbeat synth loop)');
   const [selectedPreset, setSelectedPreset] = useState<PresetReel | null>(null);
+  const [videoError, setVideoError] = useState<string>('');
 
   // Sync selected preset when language changes
   useEffect(() => {
@@ -174,14 +180,24 @@ export const VideoUploader: React.FC<VideoUploaderProps> = ({
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault();
     const file = e.dataTransfer.files?.[0];
-    if (file && file.type.startsWith('video/')) {
+    if (file && isSupportedVideoFile(file)) {
       processSelectedFile(file);
+    } else if (file) {
+      setVideoError(language === 'ko'
+        ? '지원되는 동영상 파일(MP4, MOV, AVI, WebM, MKV)을 선택해 주세요.'
+        : 'Choose a supported video file: MP4, MOV, AVI, WebM, or MKV.');
     }
   };
 
   const MAX_FILE_SIZE_BYTES = 2.5 * 1024 * 1024 * 1024; // 2.5GB
 
   const processSelectedFile = async (file: File) => {
+    if (!isSupportedVideoFile(file)) {
+      setVideoError(language === 'ko'
+        ? '지원되는 동영상 파일(MP4, MOV, AVI, WebM, MKV)을 선택해 주세요.'
+        : 'Choose a supported video file: MP4, MOV, AVI, WebM, or MKV.');
+      return;
+    }
     if (file.size > MAX_FILE_SIZE_BYTES) {
       alert(
         language === 'ko'
@@ -191,6 +207,7 @@ export const VideoUploader: React.FC<VideoUploaderProps> = ({
       return;
     }
     const selectionId = ++fileSelectionRef.current;
+    setVideoError('');
     onVideoIdentityChange();
     setSelectedPreset(null);
     setVideoTitle('');
@@ -224,6 +241,7 @@ export const VideoUploader: React.FC<VideoUploaderProps> = ({
 
   // Handle Preset Reel Selection
   const handleSelectPreset = (preset: PresetReel) => {
+    setVideoError('');
     setSelectedPreset(preset);
     setVideoFile(null);
     setVideoContentHash(`preset:${preset.id}`);
@@ -241,9 +259,16 @@ export const VideoUploader: React.FC<VideoUploaderProps> = ({
   // Video metadata loaded
   const handleLoadedMetadata = () => {
     if (videoRef.current) {
+      setVideoError('');
       const dur = Math.round(videoRef.current.duration || 15);
       setDuration(dur);
     }
+  };
+
+  const handleVideoDecodeError = () => {
+    setVideoError(language === 'ko'
+      ? '이 브라우저가 영상 코덱을 재생하지 못했습니다. MP4(H.264/AAC)로 변환하면 가장 안정적으로 분석할 수 있습니다.'
+      : 'This browser cannot decode the video codec. Convert it to MP4 (H.264/AAC) for the most reliable analysis.');
   };
 
   const togglePlay = () => {
@@ -710,7 +735,7 @@ export const VideoUploader: React.FC<VideoUploaderProps> = ({
               <input
                 ref={fileInputRef}
                 type="file"
-                accept="video/*"
+                accept=".mp4,.mov,.avi,.webm,.mkv,.m4v,video/*"
                 onChange={handleFileChange}
                 className="hidden"
                 aria-label={t('browseMedia')}
@@ -720,6 +745,13 @@ export const VideoUploader: React.FC<VideoUploaderProps> = ({
               </div>
               <h3 className="font-bold text-slate-800 text-base">{t('dragDropTitle')}</h3>
               <p className="text-xs text-slate-500 mt-1 max-w-sm">{t('dragDropSub')}</p>
+              <div className="mt-3 flex flex-wrap justify-center gap-1.5">
+                {['MP4', 'MOV', 'AVI', 'WEBM', 'MKV'].map((format) => (
+                  <span key={format} className="rounded-md border border-slate-200 bg-white px-2 py-1 text-[10px] font-bold text-slate-500">
+                    {format}
+                  </span>
+                ))}
+              </div>
               <button
                 type="button"
                 onClick={openMediaPicker}
@@ -746,6 +778,7 @@ export const VideoUploader: React.FC<VideoUploaderProps> = ({
                   ref={videoRef}
                   src={videoUrl}
                   onLoadedMetadata={handleLoadedMetadata}
+                  onError={handleVideoDecodeError}
                   onEnded={() => setIsPlaying(false)}
                   className="w-full max-h-[380px] object-contain mx-auto"
                   playsInline
@@ -790,6 +823,7 @@ export const VideoUploader: React.FC<VideoUploaderProps> = ({
                     setVideoFile(null);
                     setVideoContentHash('');
                     setVideoTitle('');
+                    setVideoError('');
                     onVideoIdentityChange();
                     setSelectedPreset(null);
                     setVideoConcept('');
@@ -930,11 +964,18 @@ export const VideoUploader: React.FC<VideoUploaderProps> = ({
             </div>
           </div>
 
+          {videoError && (
+            <div role="alert" className="flex items-start gap-2 rounded-xl border border-red-200 bg-red-50 p-3 text-xs font-semibold leading-relaxed text-red-700">
+              <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
+              <span>{videoError}</span>
+            </div>
+          )}
+
           {/* Evaluate Button */}
           <div className="pt-2">
             <button
               onClick={handleEvaluate}
-              disabled={isEvaluating || isFingerprinting || (!videoUrl && !selectedPreset) || (!selectedPreset && !videoContentHash)}
+              disabled={Boolean(videoError) || isEvaluating || isFingerprinting || (!videoUrl && !selectedPreset) || (!selectedPreset && !videoContentHash)}
               className="w-full bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white font-semibold text-sm py-3.5 px-6 rounded-xl shadow-lg shadow-indigo-100 transition-all flex items-center justify-center gap-2 hover:scale-[1.01] active:scale-[0.99]"
             >
               {isFingerprinting ? (

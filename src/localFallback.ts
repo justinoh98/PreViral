@@ -49,21 +49,21 @@ export function createLocalEvaluation(input: AuditInput): ReelEvaluation {
   if (audio) hook += (audio.openingEnergyScore / 100 - .35) * .7;
   if (audio && audio.initialSilenceDurationSec > .3) hook -= Math.min(1.4, audio.initialSilenceDurationSec * .9);
   if ((m?.earlyMotionScore ?? 0) < 18) hook = Math.min(hook, 2.8);
-  hook = r2(clamp(hook, .5, 5));
+  hook = r2(clamp(hook, 0, 5));
   const durationPenalty = duration <= 15 ? 0 : duration <= 30 ? .12 : .35;
   let pacing = 1.05 + f(m?.changeFrequencyScore) * 1.65 + f(m?.motionScore, 40) * .7 + f(m?.sceneCutScore) * .55 - f(m?.staticFrameRatio, 50) * .45 - durationPenalty;
   if ((m?.changeFrequencyScore ?? 0) < 22) pacing = Math.min(pacing, 2.9);
-  pacing = r2(clamp(pacing, .5, 5));
+  pacing = r2(clamp(pacing, 0, 5));
   let narrative = 1.15 + f(m?.payoffChangeScore) * 2.15 + f(m?.changeFrequencyScore) * .55;
   if ((m?.payoffChangeScore ?? 0) < 18) narrative = Math.min(narrative, 2.9);
-  narrative = r2(clamp(narrative, .5, 5));
-  const loop = r2(clamp(.85 + f(m?.loopSimilarityScore, 30) * (audio ? 2.25 : 3.05) + (audio ? audio.loopEnergySimilarityScore / 100 * .8 : 0), .5, 4.1));
+  narrative = r2(clamp(narrative, 0, 5));
+  const loop = r2(clamp(.85 + f(m?.loopSimilarityScore, 30) * (audio ? 2.25 : 3.05) + (audio ? audio.loopEnergySimilarityScore / 100 * .8 : 0), 0, 4.1));
   const resolution = m ? (m.width >= 1080 && m.height >= 1080 ? 1.55 : m.width >= 720 ? .9 : .25) : .45;
   let technical = 1.05 + resolution + (m && m.height > m.width ? .75 : .15) + f(m?.sharpnessScore, 40) * .65 + f(m?.colorfulnessScore, 40) * .2 + f(m?.exposureStabilityScore, 40) * .3 - f(m?.blackFrameRatio, 0) * .7;
   if (!m || m.width < 720) technical = Math.min(technical, 3);
-  technical = r2(clamp(technical, .5, 5));
+  technical = r2(clamp(technical, 0, 5));
   const penalty = [hook, pacing, narrative].filter((score) => score < 1.8).length * .08;
-  const stars = r2(clamp(hook * .3 + pacing * .25 + narrative * .2 + loop * .15 + technical * .1 - penalty, .5, 5));
+  const stars = r2(clamp(hook * .3 + pacing * .25 + narrative * .2 + loop * .15 + technical * .1 - penalty, 0, 5));
   const verdict = stars >= 4.2 ? 'Viral Contender' : stars >= 3.5 ? 'Strong Growth' : stars >= 2.8 ? 'Moderate Retention' : 'High Skip Risk';
   const expectedSkipRatePercent = stars >= 4.2
     ? clamp(Math.round(28 - stars * 3), 5, 14)
