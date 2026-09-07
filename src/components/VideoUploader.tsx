@@ -4,7 +4,7 @@ import { getPresetReels } from '../data/presets';
 import { PresetReel, ReelEvaluation } from '../types';
 import { SafeZoneOverlay } from './SafeZoneOverlay';
 import { useLanguage } from '../i18n';
-import { createLocalEvaluation, VideoMetrics } from '../localFallback';
+import { AudioMetrics, createLocalEvaluation, VideoMetrics } from '../localFallback';
 
 interface VideoUploaderProps {
   onEvaluationComplete: (evaluation: ReelEvaluation) => void;
@@ -15,7 +15,7 @@ interface VideoUploaderProps {
   defaultNiche: string;
 }
 
-const EVALUATION_CACHE_VERSION = 11;
+const EVALUATION_CACHE_VERSION = 12;
 
 interface TimestampedFrameSnapshot {
   timeSec: number;
@@ -447,6 +447,86 @@ export const VideoUploader: React.FC<VideoUploaderProps> = ({
     return { frameSnapshots: snapshots };
   };
 
+  const analyzeAudio = async (): Promise<AudioMetrics | undefined> => {
+    if (!videoUrl || !videoFile || duration <= 0) return undefined;
+    const AudioContextCtor = window.AudioContext || (window as typeof window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+    if (!AudioContextCtor) return undefined;
+
+    const audioContext = new AudioContextCtor();
+    const probe = document.createElement('video');
+    probe.src = videoUrl;
+    probe.preload = 'auto';
+    probe.playsInline = true;
+    const analyser = audioContext.createAnalyser();
+    analyser.fftSize = 2048;
+    const silentGain = audioContext.createGain();
+    silentGain.gain.value = 0;
+    const source = audioContext.createMediaElementSource(probe);
+    source.connect(analyser);
+    analyser.connect(silentGain);
+    silentGain.connect(audioContext.destination);
+
+    try {
+      await audioContext.resume();
+      await new Promise<void>((resolve, reject) => {
+        const done = () => resolve();
+        probe.addEventListener('loadedmetadata', done, { once: true });
+        probe.addEventListener('error', () => reject(new Error('Audio probe could not load the video.')), { once: true });
+        window.setTimeout(done, 1500);
+      });
+      const total = Math.max(.1, probe.duration || duration);
+      const earlyTimes = [0, .12, .28, .48, .72, 1, 1.5, 2, 3].filter((time) => time < total);
+      const timelineTimes = Array.from({ length: 9 }, (_, index) => total * index / 8);
+      const sampleTimes = [...new Set([...earlyTimes, ...timelineTimes].map((time) => Number(Math.min(time, total - .05).toFixed(2))))].sort((a, b) => a - b);
+      const waveform = new Float32Array(analyser.fftSize);
+      const samples: Array<{ timeSec: number; energy: number }> = [];
+
+      for (const timeSec of sampleTimes) {
+        await new Promise<void>((resolve) => {
+          const done = () => resolve();
+          probe.addEventListener('seeked', done, { once: true });
+          probe.currentTime = Math.max(0, timeSec);
+          window.setTimeout(done, 500);
+        });
+        await probe.play();
+        await new Promise((resolve) => window.setTimeout(resolve, 110));
+        analyser.getFloatTimeDomainData(waveform);
+        probe.pause();
+        const rms = Math.sqrt(waveform.reduce((sum, value) => sum + value * value, 0) / waveform.length);
+        samples.push({ timeSec, energy: Math.round(Math.min(100, rms * 420)) });
+      }
+
+      const early = samples.filter((sample) => sample.timeSec <= Math.min(3, total));
+      const firstAudible = early.find((sample) => sample.energy >= 3)?.timeSec ?? Math.min(3, total);
+      const energies = samples.map((sample) => sample.energy);
+      const average = energies.reduce((sum, value) => sum + value, 0) / Math.max(1, energies.length);
+      const mean = average;
+      const deviation = Math.sqrt(energies.reduce((sum, value) => sum + (value - mean) ** 2, 0) / Math.max(1, energies.length));
+      const changes = samples.slice(1).map((sample, index) => ({ timeSec: sample.timeSec, delta: Math.abs(sample.energy - samples[index].energy) }));
+      const strongest = changes.sort((a, b) => b.delta - a.delta)[0];
+      const firstEnergy = samples[0]?.energy ?? 0;
+      const lastEnergy = samples[samples.length - 1]?.energy ?? 0;
+      return {
+        verified: true,
+        initialSilenceDurationSec: Number(firstAudible.toFixed(2)),
+        openingEnergyScore: Math.round(early.reduce((sum, sample) => sum + sample.energy, 0) / Math.max(1, early.length)),
+        averageEnergyScore: Math.round(average),
+        dynamicRangeScore: Math.round(Math.min(100, deviation * 4)),
+        loopEnergySimilarityScore: Math.round(Math.max(0, 100 - Math.abs(firstEnergy - lastEnergy) * 2)),
+        strongestAudioChangeTimeSec: strongest?.timeSec ?? 0,
+        timelineSamples: samples,
+      };
+    } catch (error) {
+      console.warn('Could not verify the audio waveform:', error);
+      return undefined;
+    } finally {
+      probe.pause();
+      probe.removeAttribute('src');
+      probe.load();
+      void audioContext.close();
+    }
+  };
+
   // Trigger Reel Evaluation
   const handleEvaluate = async () => {
     if (selectedPreset) {
@@ -471,9 +551,14 @@ export const VideoUploader: React.FC<VideoUploaderProps> = ({
     );
 
     let analyzedMetrics: VideoMetrics | undefined;
+    let analyzedAudio: AudioMetrics | undefined;
     try {
-      const { frameSnapshots, videoMetrics } = await analyzeVideoFrames();
+      const [{ frameSnapshots, videoMetrics }, audioMetrics] = await Promise.all([
+        analyzeVideoFrames(),
+        analyzeAudio(),
+      ]);
       analyzedMetrics = videoMetrics;
+      analyzedAudio = audioMetrics;
 
       setTimeout(
         () =>
@@ -514,6 +599,7 @@ export const VideoUploader: React.FC<VideoUploaderProps> = ({
         audioType,
         videoContentHash: videoContentHash || `preset:${selectedPreset?.id || 'unknown'}`,
         videoMetrics,
+        audioMetrics,
         language,
       };
 
@@ -536,8 +622,8 @@ export const VideoUploader: React.FC<VideoUploaderProps> = ({
           // Visual watermark/text placement is judged from timestamped frames.
           // Audio is not marked clean unless it was actually decoded and measured.
           hasWatermark: null,
-          detectedAudioSilence: null,
-          audioVerified: false,
+          detectedAudioSilence: audioMetrics ? audioMetrics.initialSilenceDurationSec > .3 : null,
+          audioVerified: Boolean(audioMetrics?.verified),
           language,
         }),
       });
@@ -560,6 +646,7 @@ export const VideoUploader: React.FC<VideoUploaderProps> = ({
         audioType,
         videoContentHash,
         videoMetrics: analyzedMetrics,
+        audioMetrics: analyzedAudio,
         language,
       });
       if (videoContentHash) {

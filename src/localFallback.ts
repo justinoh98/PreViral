@@ -3,7 +3,18 @@ import type { ReelEvaluation } from './types';
 type AuditInput = {
   title: string; durationSeconds: number; fileFormat: string; fileSizeMb: number;
   niche: string; captionInput: string; videoConcept: string; audioType: string;
-  videoContentHash?: string; videoMetrics?: VideoMetrics; language: 'en' | 'ko';
+  videoContentHash?: string; videoMetrics?: VideoMetrics; audioMetrics?: AudioMetrics; language: 'en' | 'ko';
+};
+
+export type AudioMetrics = {
+  verified: boolean;
+  initialSilenceDurationSec: number;
+  openingEnergyScore: number;
+  averageEnergyScore: number;
+  dynamicRangeScore: number;
+  loopEnergySimilarityScore: number;
+  strongestAudioChangeTimeSec: number;
+  timelineSamples: Array<{ timeSec: number; energy: number }>;
 };
 
 export type VideoMetrics = {
@@ -25,6 +36,7 @@ const sec = (value: number) => `${r1(Math.max(0, value))}s`;
 
 export function createLocalEvaluation(input: AuditInput): ReelEvaluation {
   const m = input.videoMetrics;
+  const audio = input.audioMetrics?.verified ? input.audioMetrics : undefined;
   const ko = input.language === 'ko';
   const noCaption = !input.captionInput.trim();
   const noConcept = !input.videoConcept.trim();
@@ -34,6 +46,8 @@ export function createLocalEvaluation(input: AuditInput): ReelEvaluation {
   const f = (value: number | undefined, fallback = 35) => (value ?? fallback) / 100;
 
   let hook = 1 + f(m?.earlyMotionScore) * 2.55 + f(m?.contrastScore, 40) * .5 + f(m?.sharpnessScore, 40) * .35 - f(m?.blackFrameRatio, 0);
+  if (audio) hook += (audio.openingEnergyScore / 100 - .35) * .7;
+  if (audio && audio.initialSilenceDurationSec > .3) hook -= Math.min(1.4, audio.initialSilenceDurationSec * .9);
   if ((m?.earlyMotionScore ?? 0) < 18) hook = Math.min(hook, 2.8);
   hook = r2(clamp(hook, .5, 5));
   const durationPenalty = duration <= 15 ? 0 : duration <= 30 ? .12 : .35;
@@ -43,7 +57,7 @@ export function createLocalEvaluation(input: AuditInput): ReelEvaluation {
   let narrative = 1.15 + f(m?.payoffChangeScore) * 2.15 + f(m?.changeFrequencyScore) * .55;
   if ((m?.payoffChangeScore ?? 0) < 18) narrative = Math.min(narrative, 2.9);
   narrative = r2(clamp(narrative, .5, 5));
-  const loop = r2(clamp(.85 + f(m?.loopSimilarityScore, 30) * 3.05, .5, 4.1));
+  const loop = r2(clamp(.85 + f(m?.loopSimilarityScore, 30) * (audio ? 2.25 : 3.05) + (audio ? audio.loopEnergySimilarityScore / 100 * .8 : 0), .5, 4.1));
   const resolution = m ? (m.width >= 1080 && m.height >= 1080 ? 1.55 : m.width >= 720 ? .9 : .25) : .45;
   let technical = 1.05 + resolution + (m && m.height > m.width ? .75 : .15) + f(m?.sharpnessScore, 40) * .65 + f(m?.colorfulnessScore, 40) * .2 + f(m?.exposureStabilityScore, 40) * .3 - f(m?.blackFrameRatio, 0) * .7;
   if (!m || m.width < 720) technical = Math.min(technical, 3);
@@ -104,6 +118,7 @@ export function createLocalEvaluation(input: AuditInput): ReelEvaluation {
   const defects: string[] = [];
   if (!m) defects.push(evidence);
   if (m && m.earlyMotionScore < 18) defects.push(ko ? `첫 3초 움직임 ${m.earlyMotionScore}/100으로 시작부 이탈 위험이 큽니다.` : `Opening motion is ${m.earlyMotionScore}/100, creating high early-skip risk.`);
+  if (audio && audio.initialSilenceDurationSec > .3) defects.push(ko ? `첫 ${sec(audio.initialSilenceDurationSec)} 동안 오디오 에너지가 사실상 무음으로 측정됐습니다.` : `Audio energy is effectively silent for the first ${sec(audio.initialSilenceDurationSec)}.`);
   if (m && staticDuration >= 1.5) defects.push(ko ? `${staticRange}에 ${sec(staticDuration)}의 최장 시각 정체가 측정됐습니다.` : `The longest visual hold lasts ${sec(staticDuration)} at ${staticRange}.`);
   if (m && m.payoffChangeScore < 18) defects.push(ko ? `후반 변화량 ${m.payoffChangeScore}/100으로 결말의 시각적 구분이 약합니다.` : `Late-stage change is ${m.payoffChangeScore}/100, so the payoff is weakly differentiated.`);
   if (m && m.blackFrameRatio >= 5) defects.push(ko ? `샘플 프레임 중 ${m.blackFrameRatio}%가 거의 검은 화면입니다.` : `${m.blackFrameRatio}% of sampled frames are near-black.`);
@@ -140,22 +155,24 @@ export function createLocalEvaluation(input: AuditInput): ReelEvaluation {
   return {
     id: `eval-${Date.now()}`, title: input.title, durationSeconds: duration, fileFormat: input.fileFormat, fileSizeMb: input.fileSizeMb, niche,
     captionInput: input.captionInput, videoConcept: input.videoConcept, audioType: input.audioType, timestamp: new Date().toISOString(),
-    executiveSummary,
+    executiveSummary: audio
+      ? `${executiveSummary} ${ko ? `오디오는 검증되었으며 시작 에너지 ${audio.openingEnergyScore}/100, 초기 무음 ${sec(audio.initialSilenceDurationSec)}입니다.` : `Audio was verified: opening energy ${audio.openingEnergyScore}/100, initial silence ${sec(audio.initialSilenceDurationSec)}.`}`
+      : executiveSummary,
     observedStrengths,
     observedWeaknesses,
     evidenceSummary: {
       sampledFrames: m?.sampledFrames ?? 0,
       analysisMode: 'measured-local',
-      audioVerified: false,
+      audioVerified: Boolean(audio),
       limitations: ko
-        ? ['오디오 파형 미검증', '화면 자막 의미·워터마크·안전지대는 멀티모달 분석 없이 확정할 수 없음']
-        : ['Audio waveform not verified', 'On-screen text meaning, watermarks, and safe-zone placement require multimodal analysis'],
+        ? [...(audio ? [] : ['오디오 파형 미검증']), '화면 자막 의미·워터마크·안전지대는 멀티모달 분석 없이 확정할 수 없음']
+        : [...(audio ? [] : ['Audio waveform not verified']), 'On-screen text meaning, watermarks, and safe-zone placement require multimodal analysis'],
     },
     overallStars: stars, overallScorePercent: Math.round(stars * 20), overallVerdict: verdict,
     expectedSkipRatePercent, followerGrowthPotentialPercent: Math.round(stars * 18 + 5), nonFollowerInterestStars: r2(stars * .95), shareabilitySendScore: Math.round(stars * 18.5),
     criticalDefectsIdentified: defects.length ? defects : [ko ? `측정된 시각 신호에서 치명적 결함은 없었습니다. ${evidence}` : `No critical defect was found in the measured visual signals. ${evidence}`],
     aspects: {
-      hookStrength: { stars: hook, label: ko ? '0-3초 시각 훅' : 'Measured 0-3s Visual Hook', visualHook: m ? (ko ? `${subject}의 첫 측정 밝기 ${openingSample?.brightness ?? m.brightnessScore}/100, 시작 움직임 ${m.earlyMotionScore}/100, 최대 시작 변화 ${sec(openingTime)}.` : `For ${subject}, the opening measures ${openingSample?.brightness ?? m.brightnessScore}/100 brightness and ${m.earlyMotionScore}/100 motion; its strongest early shift is ${sec(openingTime)}.`) : evidence, textHook: noCaption ? (ko ? `${subject}용 입력 캡션이 없어 영상 신호만 채점했습니다.` : `No caption was supplied for ${subject}, so only video evidence was scored.`) : (ko ? `“${input.captionInput}”가 ${sec(openingTime)}의 첫 강한 변화와 얼마나 빨리 연결되는지가 핵심입니다.` : `“${input.captionInput}” must connect to the first strong change at ${sec(openingTime)}.`), audioHook: ko ? `${subject}의 오디오는 “${input.audioType || '미입력'}”로 설명됨; 실제 파형은 미검증입니다.` : `Audio for ${subject} is described as “${input.audioType || 'not supplied'}”; the waveform was not verified.`, verdict: ko ? `${sec(openingTime)} 전까지 ${subject}의 결과나 갈등을 드러내야 현재 ${hook}/5 훅 점수를 개선할 수 있습니다.` : `Reveal the result or tension of ${subject} before ${sec(openingTime)} to improve this upload's ${hook}/5 hook score.` },
+      hookStrength: { stars: hook, label: ko ? '0-3초 시청 이탈 방지 훅' : 'Measured 0-3s Hook', visualHook: m ? (ko ? `${subject}의 첫 측정 밝기 ${openingSample?.brightness ?? m.brightnessScore}/100, 시작 움직임 ${m.earlyMotionScore}/100, 최대 시작 변화 ${sec(openingTime)}.` : `For ${subject}, the opening measures ${openingSample?.brightness ?? m.brightnessScore}/100 brightness and ${m.earlyMotionScore}/100 motion; its strongest early shift is ${sec(openingTime)}.`) : evidence, textHook: noCaption ? (ko ? `${subject}용 입력 캡션이 없어 영상 신호만 채점했습니다.` : `No caption was supplied for ${subject}, so only video evidence was scored.`) : (ko ? `“${input.captionInput}”가 ${sec(openingTime)}의 첫 강한 변화와 얼마나 빨리 연결되는지가 핵심입니다.` : `“${input.captionInput}” must connect to the first strong change at ${sec(openingTime)}.`), audioHook: audio ? (ko ? `파형 검증: 시작 에너지 ${audio.openingEnergyScore}/100, 초기 무음 ${sec(audio.initialSilenceDurationSec)}, 최대 변화 ${sec(audio.strongestAudioChangeTimeSec)}.` : `Waveform verified: opening energy ${audio.openingEnergyScore}/100, initial silence ${sec(audio.initialSilenceDurationSec)}, strongest change ${sec(audio.strongestAudioChangeTimeSec)}.`) : (ko ? `${subject}의 오디오는 “${input.audioType || '미입력'}”로 설명됨; 실제 파형은 미검증입니다.` : `Audio for ${subject} is described as “${input.audioType || 'not supplied'}”; the waveform was not verified.`), verdict: ko ? `${sec(openingTime)} 전까지 ${subject}의 결과나 갈등을 드러내야 현재 ${hook}/5 훅 점수를 개선할 수 있습니다.` : `Reveal the result or tension of ${subject} before ${sec(openingTime)} to improve this upload's ${hook}/5 hook score.` },
       pacingAndStimulation: { stars: pacing, label: ko ? '측정된 시각 페이싱' : 'Measured Visual Pacing', avgCutFrequencySec: cutCount ? r1(duration / cutCount) : 0, deadAirDetectedSec: staticDuration, patternInterruptsCount: cutCount, verdict: m ? (ko ? `${subject}의 주요 전환은 ${cutList}; 변화 피크는 ${dynamicList}. 최장 저변화 구간은 ${staticRange} (${sec(staticDuration)})입니다.` : `${subject} has major transitions at ${cutList}; its strongest measured changes are ${dynamicList}. The longest low-change span is ${staticRange} (${sec(staticDuration)}).`) : evidence },
       narrativeAndPayoff: { stars: narrative, label: ko ? '측정된 전개 & 결과 강조' : 'Measured Progression & Payoff', setupDurationSec: p1, payoffTimingSec: payoffTime, verdict: ko ? `${noConcept ? '기획 의도 미입력; ' : `기획 의도 “${input.videoConcept}”; `}후반 변화 ${m?.payoffChangeScore ?? 0}/100, 최대 전체 변화 ${sec(strongestTime)}.` : `${noConcept ? 'No creative intent supplied; ' : `Intent: “${input.videoConcept}”; `}late-stage change ${m?.payoffChangeScore ?? 0}/100, strongest overall change at ${sec(strongestTime)}.` },
       loopingAndRetention: { stars: loop, label: ko ? '첫·마지막 프레임 연결성' : 'First-to-Last Frame Continuity', seamlessLoopScore: m?.loopSimilarityScore ?? 0, rewatchTriggerPresent: (m?.loopSimilarityScore ?? 0) >= 70, verdict: ko ? `${subject}의 첫/끝 유사도 ${m?.loopSimilarityScore ?? 0}/100; 밝기는 ${openingSample?.brightness ?? 0}→${endingSample?.brightness ?? 0}, 대비는 ${openingSample?.contrast ?? 0}→${endingSample?.contrast ?? 0}입니다.` : `For ${subject}, first/last similarity is ${m?.loopSimilarityScore ?? 0}/100; brightness moves ${openingSample?.brightness ?? 0}→${endingSample?.brightness ?? 0}, and contrast ${openingSample?.contrast ?? 0}→${endingSample?.contrast ?? 0}.` },

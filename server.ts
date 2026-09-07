@@ -24,6 +24,8 @@ function createVideoSignature(data: {
   audioType?: string;
   hasWatermark?: boolean;
   detectedAudioSilence?: boolean;
+  audioVerified?: boolean;
+  audioMetrics?: Record<string, unknown>;
   frameSnapshots?: Array<string | { timeSec: number; imageUrl: string }>;
   language?: string;
 }): string {
@@ -43,6 +45,7 @@ function createVideoSignature(data: {
 
   const rawKey = [
     contentHash || snapshotFingerprint || `${Number(data.fileSizeMb) || 0}:${Number(data.durationSeconds) || 0}`,
+    data.audioVerified ? JSON.stringify(data.audioMetrics || {}) : 'audio-unverified',
   ].join('::');
 
   return crypto.createHash('md5').update(rawKey).digest('hex');
@@ -215,6 +218,7 @@ async function startServer() {
         hasWatermark,
         detectedAudioSilence,
         audioVerified = false,
+        audioMetrics,
         language = 'en',
       } = req.body;
 
@@ -230,6 +234,8 @@ async function startServer() {
         audioType,
         hasWatermark,
         detectedAudioSilence,
+        audioVerified,
+        audioMetrics,
         frameSnapshots,
         language,
       });
@@ -303,6 +309,7 @@ Reel Metadata:
 - Audio Track Type: "${audioType || 'Trending Audio'}"
 - Automated Checks: Watermark = ${hasWatermark == null ? 'Not pre-detected; inspect frames' : hasWatermark ? 'Suspected' : 'Not suspected'}, Initial silence = ${audioVerified ? (detectedAudioSilence ? 'Detected' : 'Not detected') : 'Not verified'}.
 - Audio verified by waveform analysis: ${audioVerified ? 'Yes' : 'No'}.
+- Audio waveform metrics: ${audioVerified && audioMetrics ? JSON.stringify(audioMetrics) : 'Unavailable'}.
 - Deep visual scan metrics: ${videoMetrics ? JSON.stringify(videoMetrics) : 'Unavailable'}.
 - The attached frames cover the opening densely and the remaining timeline at regular intervals. Evaluate them in chronological order and reconcile them with the measured scan metrics.
 
