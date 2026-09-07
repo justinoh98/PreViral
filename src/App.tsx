@@ -8,7 +8,7 @@ import { ReelEvaluation } from './types';
 import { LanguageProvider, useLanguage } from './i18n';
 import { History, ArrowRight, UploadCloud } from 'lucide-react';
 
-const HISTORY_KEY = 'previral:audit-history:v1';
+const HISTORY_KEY = 'previral:audit-history:visual-reset-v1';
 const PROFILE_KEY = 'previral:creator-profile:v1';
 
 const loadHistory = (): ReelEvaluation[] => {
