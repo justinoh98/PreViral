@@ -93,9 +93,9 @@ export const AnalyticsDashboard: React.FC<AnalyticsDashboardProps> = ({
   return (
     <div className="space-y-6 animate-fadeIn">
       {/* Header Banner */}
-      <div className="bg-white border border-gray-100 rounded-2xl p-6 shadow-sm flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+      <div className="bg-white border border-gray-100 rounded-2xl p-4 sm:p-6 shadow-sm flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4">
         <div>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <span className="p-2 bg-indigo-50 text-indigo-600 rounded-xl border border-indigo-100">
               <BarChart3 className="w-5 h-5" />
             </span>
@@ -109,7 +109,7 @@ export const AnalyticsDashboard: React.FC<AnalyticsDashboardProps> = ({
           </p>
         </div>
 
-        <div className="flex items-center gap-4 text-xs font-semibold bg-slate-50 px-4 py-2.5 rounded-2xl border border-gray-200">
+        <div className="flex w-full sm:w-auto items-center justify-between gap-4 text-xs font-semibold bg-slate-50 px-4 py-2.5 rounded-2xl border border-gray-200">
           <div>
             <span className="text-slate-400 block text-[10px] uppercase font-bold tracking-wider">{t('totalEvaluated')}</span>
             <span className="text-slate-900 font-extrabold text-base">{history.length} {language === 'ko' ? '개' : 'Reels'}</span>
@@ -141,9 +141,9 @@ export const AnalyticsDashboard: React.FC<AnalyticsDashboardProps> = ({
       </div>
 
       {/* Charts Grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+      <div className="device-dashboard-grid gap-4 sm:gap-6">
         {/* Quality & Skip Rate Performance Trend Chart */}
-        <div className="lg:col-span-8 bg-white border border-gray-100 rounded-2xl p-5 shadow-sm space-y-4">
+        <div className="device-dashboard-primary min-w-0 bg-white border border-gray-100 rounded-2xl p-4 sm:p-5 shadow-sm space-y-4">
           <div className="flex items-center justify-between border-b border-gray-100 pb-3">
             <h3 className="font-bold text-sm text-slate-900 flex items-center gap-2">
               <TrendingUp className="w-4 h-4 text-indigo-600" /> {t('chartTrendTitle')}
@@ -153,7 +153,7 @@ export const AnalyticsDashboard: React.FC<AnalyticsDashboardProps> = ({
             </span>
           </div>
 
-          <div className="h-64 w-full">
+          <div className="h-56 sm:h-64 w-full min-w-0">
             {trendData.length > 0 ? (
               <ResponsiveContainer width="100%" height="100%">
                 <LineChart data={trendData}>
@@ -195,7 +195,7 @@ export const AnalyticsDashboard: React.FC<AnalyticsDashboardProps> = ({
         </div>
 
         {/* Latest Reel Aspect Ratings Breakdown */}
-        <div className="lg:col-span-4 bg-white border border-gray-100 rounded-2xl p-5 shadow-sm space-y-4 flex flex-col justify-between">
+        <div className="device-dashboard-secondary min-w-0 bg-white border border-gray-100 rounded-2xl p-4 sm:p-5 shadow-sm space-y-4 flex flex-col justify-between">
           <div className="border-b border-gray-100 pb-3">
             <h3 className="font-bold text-sm text-slate-900 flex items-center gap-2">
               <Award className="w-4 h-4 text-amber-500" /> {t('chartAspectTitle')}
@@ -229,7 +229,7 @@ export const AnalyticsDashboard: React.FC<AnalyticsDashboardProps> = ({
 
       {/* Comparison Drawer Modal / Section */}
       {compareIds.length === 2 && reel1 && reel2 && (
-        <div className="bg-white border-2 border-indigo-200 rounded-2xl p-6 shadow-md space-y-4 animate-fadeIn">
+        <div className="bg-white border-2 border-indigo-200 rounded-2xl p-4 sm:p-6 shadow-md space-y-4 animate-fadeIn">
           <div className="flex items-center justify-between border-b border-gray-100 pb-3">
             <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
               <Zap className="w-5 h-5 text-indigo-600" /> {t('compareTitle')}
@@ -242,7 +242,7 @@ export const AnalyticsDashboard: React.FC<AnalyticsDashboardProps> = ({
             </button>
           </div>
 
-          <div className="grid grid-cols-2 gap-6">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
             {/* Reel 1 */}
             <div className="bg-slate-50 border border-gray-200 rounded-2xl p-4 space-y-2">
               <div className="flex justify-between items-center">
@@ -291,7 +291,7 @@ export const AnalyticsDashboard: React.FC<AnalyticsDashboardProps> = ({
       )}
 
       {/* History Table */}
-      <div className="bg-white border border-gray-100 rounded-2xl p-6 shadow-sm space-y-4">
+      <div className="bg-white border border-gray-100 rounded-2xl p-4 sm:p-6 shadow-sm space-y-4 min-w-0">
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 border-b border-gray-100 pb-3">
           <div>
             <h3 className="text-lg font-bold text-slate-900 flex items-center gap-2">
@@ -304,7 +304,7 @@ export const AnalyticsDashboard: React.FC<AnalyticsDashboardProps> = ({
         </div>
 
         <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs text-slate-700">
+          <table className="w-full min-w-[760px] text-left text-xs text-slate-700">
             <thead className="bg-slate-50 text-slate-500 font-bold uppercase text-[10px] tracking-wider border-b border-gray-200">
               <tr>
                 <th className="p-3">{language === 'ko' ? '비교 선택' : 'Compare'}</th>

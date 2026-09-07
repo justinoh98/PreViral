@@ -1,1 +1,66 @@
 @import "tailwindcss";
+
+:root {
+  color-scheme: light;
+  font-synthesis: none;
+}
+
+html {
+  overflow-x: hidden;
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  min-width: 0;
+  margin: 0;
+  overflow-x: hidden;
+}
+
+button,
+input,
+select,
+textarea {
+  max-width: 100%;
+}
+
+.app-shell {
+  width: 100%;
+  max-width: 100rem;
+  margin-inline: auto;
+  padding-inline: clamp(0.75rem, 3vw, 2.5rem);
+}
+
+.device-uploader-grid,
+.device-dashboard-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+}
+
+@media (min-width: 56.25rem) and (min-aspect-ratio: 4 / 3) {
+  .device-uploader-grid {
+    grid-template-columns: repeat(12, minmax(0, 1fr));
+  }
+
+  .device-uploader-media,
+  .device-uploader-details {
+    grid-column: span 6 / span 6;
+  }
+
+  .device-dashboard-grid {
+    grid-template-columns: repeat(12, minmax(0, 1fr));
+  }
+
+  .device-dashboard-primary {
+    grid-column: span 8 / span 8;
+  }
+
+  .device-dashboard-secondary {
+    grid-column: span 4 / span 4;
+  }
+}
+
+@media (max-width: 30rem) {
+  .mobile-hide-label {
+    display: none;
+  }
+}

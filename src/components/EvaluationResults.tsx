@@ -155,10 +155,10 @@ export const EvaluationResults: React.FC<EvaluationResultsProps> = ({
   return (
     <div className="space-y-6 animate-fadeIn">
       {/* 1. Overall Evaluation Hero Header */}
-      <div className="bg-white border border-gray-100 rounded-2xl p-6 shadow-sm relative overflow-hidden text-slate-800">
+      <div className="bg-white border border-gray-100 rounded-2xl p-4 sm:p-6 shadow-sm relative overflow-hidden text-slate-800">
         <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-6 relative z-10">
           {/* Left: Overall Quality Score */}
-          <div className="flex items-center gap-5">
+          <div className="flex flex-col min-[420px]:flex-row items-start min-[420px]:items-center gap-4 sm:gap-5 min-w-0">
             <div className="flex flex-col items-center justify-center bg-slate-50 border border-gray-200 rounded-2xl p-4 shadow-sm min-w-[120px]">
               <span className="text-4xl font-extrabold text-slate-900 font-sans tracking-tight">
                 {evaluation.overallStars.toFixed(1)}
@@ -308,7 +308,7 @@ export const EvaluationResults: React.FC<EvaluationResultsProps> = ({
         )}
 
         {/* 2. Key Metrics Bar */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-6 pt-6 border-t border-gray-100">
+        <div className="grid grid-cols-1 min-[420px]:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 mt-6 pt-6 border-t border-gray-100">
           {/* Expected Skip Rate */}
           <div className="bg-slate-50/80 border border-gray-100 rounded-2xl p-4 flex flex-col justify-between">
             <div className="flex items-center justify-between text-xs text-slate-500 font-bold uppercase tracking-wider mb-1">
@@ -374,7 +374,7 @@ export const EvaluationResults: React.FC<EvaluationResultsProps> = ({
       </div>
 
       {/* 3. 5-Star Critical Aspect Rating Matrix */}
-      <div className="bg-white border border-gray-100 rounded-2xl p-6 shadow-sm space-y-4">
+      <div className="bg-white border border-gray-100 rounded-2xl p-4 sm:p-6 shadow-sm space-y-4">
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 border-b border-gray-100 pb-4">
           <div>
             <h3 className="text-lg font-bold text-slate-900 flex items-center gap-2">
@@ -795,7 +795,7 @@ export const EvaluationResults: React.FC<EvaluationResultsProps> = ({
       {/* AI Custom Hook & Caption Generator Modal */}
       {showCaptionsGenerator && (
         <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-md flex items-center justify-center p-4">
-          <div className="bg-white border border-gray-200 rounded-3xl max-w-xl w-full p-6 space-y-4 shadow-2xl relative text-slate-800">
+          <div className="bg-white border border-gray-200 rounded-2xl sm:rounded-3xl max-w-xl w-full p-4 sm:p-6 space-y-4 shadow-2xl relative text-slate-800 max-h-[calc(100dvh-2rem)] overflow-y-auto">
             <button
               onClick={() => setShowCaptionsGenerator(false)}
               className="absolute top-4 right-4 text-slate-400 hover:text-slate-800 text-sm font-bold bg-slate-100 w-8 h-8 rounded-full flex items-center justify-center"
