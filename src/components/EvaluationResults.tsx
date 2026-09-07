@@ -132,26 +132,6 @@ export const EvaluationResults: React.FC<EvaluationResultsProps> = ({
     return '미세 조정';
   };
 
-  const getTypeLabel = (type: string) => {
-    if (language !== 'ko') return type;
-    switch (type) {
-      case 'hook':
-        return '훅 연출';
-      case 'pacing':
-        return '편집 속도';
-      case 'payoff':
-        return '스토리 결말';
-      case 'safezone':
-        return '자막 안전지대';
-      case 'audio':
-        return '오디오';
-      case 'cut':
-        return '컷 편집';
-      default:
-        return '일반 항목';
-    }
-  };
-
   return (
     <div className="space-y-6 animate-fadeIn">
       {/* 1. Overall Evaluation Hero Header */}
@@ -251,11 +231,9 @@ export const EvaluationResults: React.FC<EvaluationResultsProps> = ({
                   <Info className="w-4 h-4 text-indigo-300" />
                   {language === 'ko' ? '업로드 영상 최종 판정' : 'Upload-Specific Auditor Verdict'}
                 </h3>
-                {evaluation.evidenceSummary && (
-                  <span className="rounded-full border border-slate-700 bg-slate-900 px-2.5 py-1 text-[10px] font-bold text-slate-300">
-                    {evaluation.evidenceSummary.sampledFrames} {language === 'ko' ? '프레임 근거' : 'evidence frames'}
-                  </span>
-                )}
+                <span className="rounded-full border border-slate-700 bg-slate-900 px-2.5 py-1 text-[10px] font-bold text-slate-300">
+                  {language === 'ko' ? '사람 중심 시각 리뷰' : 'Human-first visual review'}
+                </span>
               </div>
               <p className="text-sm leading-6 text-slate-200">
                 {evaluation.executiveSummary}
@@ -390,7 +368,7 @@ export const EvaluationResults: React.FC<EvaluationResultsProps> = ({
             <div>
               <div className="flex items-start justify-between gap-2 mb-2">
                 <span className="px-2 py-0.5 bg-indigo-50 text-indigo-700 border border-indigo-100 rounded text-[10px] font-extrabold uppercase">
-                  {language === 'ko' ? '30% · 0-3초 훅' : '30% · 0-3s Hook'}
+                  {language === 'ko' ? '첫인상' : 'Opening impression'}
                 </span>
                 <StarRating rating={evaluation.aspects.hookStrength.stars} size="sm" />
               </div>
@@ -401,7 +379,7 @@ export const EvaluationResults: React.FC<EvaluationResultsProps> = ({
                 {evaluation.aspects.hookStrength.verdict}
               </p>
             </div>
-            <div className="space-y-1 text-[11px] bg-white p-2.5 rounded-xl border border-gray-100 text-slate-600">
+            <div className="space-y-2 text-xs leading-5 bg-white p-3 rounded-xl border border-gray-100 text-slate-600">
               <div><strong className="text-slate-800">{language === 'ko' ? '시각 훅:' : 'Visual:'}</strong> {evaluation.aspects.hookStrength.visualHook}</div>
               <div><strong className="text-slate-800">{language === 'ko' ? '자막 훅:' : 'Text:'}</strong> {evaluation.aspects.hookStrength.textHook}</div>
             </div>
@@ -412,7 +390,7 @@ export const EvaluationResults: React.FC<EvaluationResultsProps> = ({
             <div>
               <div className="flex items-start justify-between gap-2 mb-2">
                 <span className="px-2 py-0.5 bg-blue-50 text-blue-700 border border-blue-100 rounded text-[10px] font-extrabold uppercase">
-                  {language === 'ko' ? '25% · 편집 페이싱' : '25% · Pacing & Cuts'}
+                  {language === 'ko' ? '화면 흐름' : 'Visual flow'}
                 </span>
                 <StarRating rating={evaluation.aspects.pacingAndStimulation.stars} size="sm" />
               </div>
@@ -423,15 +401,9 @@ export const EvaluationResults: React.FC<EvaluationResultsProps> = ({
                 {evaluation.aspects.pacingAndStimulation.verdict}
               </p>
             </div>
-            <div className="space-y-1 text-[11px] bg-white p-2.5 rounded-xl border border-gray-100 text-slate-600">
-              <div className="flex justify-between">
-                <span className="text-slate-500">{t('avgCutFreq')}</span>
-                <span className="font-bold text-indigo-600">{evaluation.aspects.pacingAndStimulation.avgCutFrequencySec}s</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-slate-500">{t('deadAirDetected')}</span>
-                <span className="font-bold text-amber-600">{evaluation.aspects.pacingAndStimulation.deadAirDetectedSec}s</span>
-              </div>
+            <div className="text-xs leading-5 bg-white p-3 rounded-xl border border-gray-100 text-slate-600">
+              <strong className="text-slate-800">{language === 'ko' ? '시청자가 느끼는 점: ' : 'What a viewer notices: '}</strong>
+              {evaluation.aspects.pacingAndStimulation.verdict}
             </div>
           </div>
 
@@ -440,7 +412,7 @@ export const EvaluationResults: React.FC<EvaluationResultsProps> = ({
             <div>
               <div className="flex items-start justify-between gap-2 mb-2">
                 <span className="px-2 py-0.5 bg-amber-50 text-amber-700 border border-amber-100 rounded text-[10px] font-extrabold uppercase">
-                  {language === 'ko' ? '20% · 스토리 결말' : '20% · Payoff Arc'}
+                  {language === 'ko' ? '이야기와 결과' : 'Story and payoff'}
                 </span>
                 <StarRating rating={evaluation.aspects.narrativeAndPayoff.stars} size="sm" />
               </div>
@@ -451,15 +423,9 @@ export const EvaluationResults: React.FC<EvaluationResultsProps> = ({
                 {evaluation.aspects.narrativeAndPayoff.verdict}
               </p>
             </div>
-            <div className="space-y-1 text-[11px] bg-white p-2.5 rounded-xl border border-gray-100 text-slate-600">
-              <div className="flex justify-between">
-                <span className="text-slate-500">{t('setupDuration')}</span>
-                <span className="font-bold text-slate-800">{evaluation.aspects.narrativeAndPayoff.setupDurationSec}s</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-slate-500">{t('payoffDelivery')}</span>
-                <span className="font-bold text-green-600">{evaluation.aspects.narrativeAndPayoff.payoffTimingSec}s</span>
-              </div>
+            <div className="text-xs leading-5 bg-white p-3 rounded-xl border border-gray-100 text-slate-600">
+              <strong className="text-slate-800">{language === 'ko' ? '시청자가 느끼는 점: ' : 'What a viewer notices: '}</strong>
+              {evaluation.aspects.narrativeAndPayoff.verdict}
             </div>
           </div>
 
@@ -468,7 +434,7 @@ export const EvaluationResults: React.FC<EvaluationResultsProps> = ({
             <div>
               <div className="flex items-start justify-between gap-2 mb-2">
                 <span className="px-2 py-0.5 bg-indigo-50 text-indigo-700 border border-indigo-100 rounded text-[10px] font-extrabold uppercase">
-                  {language === 'ko' ? '15% · 루프 연결성' : '15% · Seamless Loop'}
+                  {language === 'ko' ? '다시 보기' : 'Replay appeal'}
                 </span>
                 <StarRating rating={evaluation.aspects.loopingAndRetention.stars} size="sm" />
               </div>
@@ -479,19 +445,9 @@ export const EvaluationResults: React.FC<EvaluationResultsProps> = ({
                 {evaluation.aspects.loopingAndRetention.verdict}
               </p>
             </div>
-            <div className="space-y-1 text-[11px] bg-white p-2.5 rounded-xl border border-gray-100 text-slate-600">
-              <div className="flex justify-between">
-                <span className="text-slate-500">{t('loopContinuity')}</span>
-                <span className="font-bold text-indigo-600">{evaluation.aspects.loopingAndRetention.seamlessLoopScore}%</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-slate-500">{t('rewatchTrigger')}</span>
-                <span className="font-bold text-slate-800">
-                  {evaluation.aspects.loopingAndRetention.rewatchTriggerPresent
-                    ? (language === 'ko' ? '적용됨 (빠른 자막)' : 'Yes (Fast text)')
-                    : (language === 'ko' ? '없음' : 'None')}
-                </span>
-              </div>
+            <div className="text-xs leading-5 bg-white p-3 rounded-xl border border-gray-100 text-slate-600">
+              <strong className="text-slate-800">{language === 'ko' ? '시청자가 느끼는 점: ' : 'What a viewer notices: '}</strong>
+              {evaluation.aspects.loopingAndRetention.verdict}
             </div>
           </div>
 
@@ -500,7 +456,7 @@ export const EvaluationResults: React.FC<EvaluationResultsProps> = ({
             <div>
               <div className="flex items-start justify-between gap-2 mb-2">
                 <span className="px-2 py-0.5 bg-green-50 text-green-700 border border-green-100 rounded text-[10px] font-extrabold uppercase">
-                  {language === 'ko' ? '10% · 기술 규격 & 안전지대' : '10% · Technical & Safe Zones'}
+                  {language === 'ko' ? '모바일 화면 완성도' : 'Mobile visual polish'}
                 </span>
                 <StarRating rating={evaluation.aspects.technicalCompliance.stars} size="sm" />
               </div>
@@ -511,17 +467,15 @@ export const EvaluationResults: React.FC<EvaluationResultsProps> = ({
                 {evaluation.aspects.technicalCompliance.verdict}
               </p>
             </div>
-            <div className="grid grid-cols-2 gap-2 text-[11px] bg-white p-2.5 rounded-xl border border-gray-100 text-slate-600">
-              <div><strong className="text-slate-800">{t('resolutionLabel')}</strong> {evaluation.aspects.technicalCompliance.resolutionText}</div>
-              <div><strong className="text-slate-800">{t('watermarkLabel')}</strong> {evaluation.aspects.technicalCompliance.watermarkDetected == null ? (language === 'ko' ? '확인 불가' : 'Not verified') : evaluation.aspects.technicalCompliance.watermarkDetected ? (language === 'ko' ? '감지됨 (제거 권장)' : 'Detected') : (language === 'ko' ? '없음 (양호)' : 'Clean')}</div>
-              <div><strong className="text-slate-800">{t('safeZonesLabel')}</strong> {evaluation.aspects.technicalCompliance.safeZoneViolation == null ? (language === 'ko' ? '확인 불가' : 'Not verified') : evaluation.aspects.technicalCompliance.safeZoneViolation ? (language === 'ko' ? '침범 감지됨' : 'Violation detected') : (language === 'ko' ? '올바르게 정렬됨' : 'Aligned correctly')}</div>
-              <div><strong className="text-slate-800">{t('captionsLabel')}</strong> {evaluation.aspects.technicalCompliance.captionQuality}</div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs leading-5 bg-white p-3 rounded-xl border border-gray-100 text-slate-600">
+              <div><strong className="text-slate-800">{language === 'ko' ? '화면: ' : 'Picture: '}</strong> {evaluation.aspects.technicalCompliance.resolutionText}</div>
+              <div><strong className="text-slate-800">{language === 'ko' ? '문구 배치: ' : 'Copy placement: '}</strong> {evaluation.aspects.technicalCompliance.captionQuality}</div>
             </div>
           </div>
         </div>
       </div>
 
-      {/* Stance-by-Stance Playbook for Captionless / Un-captioned Reels */}
+      {/* Copy-ready overlay language without timing or effect jargon. */}
       {evaluation.stanceByStanceGuidance && evaluation.stanceByStanceGuidance.length > 0 && (
         <div className="bg-slate-900 text-white border border-slate-800 rounded-2xl p-6 shadow-xl space-y-5 relative overflow-hidden">
           <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-3 border-b border-slate-800 pb-4">
@@ -548,7 +502,7 @@ export const EvaluationResults: React.FC<EvaluationResultsProps> = ({
               <div key={idx} className="bg-slate-850 border border-slate-800 rounded-2xl p-4 space-y-3 flex flex-col justify-between">
                 <div>
                   <div className="flex items-center justify-between gap-2 mb-2 pb-2 border-b border-slate-800">
-                    <span className="px-2.5 py-1 bg-amber-400 text-slate-950 font-black text-xs rounded-lg font-mono shadow-sm">
+                    <span className="px-2.5 py-1 bg-amber-400 text-slate-950 font-black text-xs rounded-lg shadow-sm">
                       {stance.durationRange}
                     </span>
                     <span className="text-[11px] font-bold text-indigo-300 uppercase tracking-wider">
@@ -560,7 +514,7 @@ export const EvaluationResults: React.FC<EvaluationResultsProps> = ({
                   <div className="space-y-2 my-2">
                     <div className="bg-slate-800/90 p-2.5 rounded-xl border border-slate-700/70 text-xs flex items-center justify-between gap-2">
                       <div>
-                        <span className="text-[10px] font-bold text-amber-300 uppercase block">{t('optionADirect')}</span>
+                        <span className="text-[10px] font-bold text-amber-300 uppercase block">{language === 'ko' ? '문구 1' : 'Copy option 1'}</span>
                         <span className="text-slate-100 font-medium">"{stance.optionAHookText}"</span>
                       </div>
                       <button
@@ -574,7 +528,7 @@ export const EvaluationResults: React.FC<EvaluationResultsProps> = ({
 
                     <div className="bg-slate-800/90 p-2.5 rounded-xl border border-slate-700/70 text-xs flex items-center justify-between gap-2">
                       <div>
-                        <span className="text-[10px] font-bold text-indigo-300 uppercase block">{t('optionBCuriosity')}</span>
+                        <span className="text-[10px] font-bold text-indigo-300 uppercase block">{language === 'ko' ? '문구 2' : 'Copy option 2'}</span>
                         <span className="text-slate-100 font-medium">"{stance.optionBHookText}"</span>
                       </div>
                       <button
@@ -588,7 +542,7 @@ export const EvaluationResults: React.FC<EvaluationResultsProps> = ({
 
                     <div className="bg-slate-800/90 p-2.5 rounded-xl border border-slate-700/70 text-xs flex items-center justify-between gap-2">
                       <div>
-                        <span className="text-[10px] font-bold text-blue-300 uppercase block">{t('optionCStory')}</span>
+                        <span className="text-[10px] font-bold text-blue-300 uppercase block">{language === 'ko' ? '문구 3' : 'Copy option 3'}</span>
                         <span className="text-slate-100 font-medium">"{stance.optionCHookText}"</span>
                       </div>
                       <button
@@ -602,9 +556,8 @@ export const EvaluationResults: React.FC<EvaluationResultsProps> = ({
                   </div>
                 </div>
 
-                {/* Duration Period Placement Guidance */}
                 <div className="bg-indigo-950/60 p-2.5 rounded-xl border border-indigo-900/60 text-[11px] text-indigo-200 mt-2">
-                  <strong className="text-amber-300 block mb-0.5 font-bold">{t('onScreenGuidanceLabel')}</strong>
+                  <strong className="text-amber-300 block mb-0.5 font-bold">{language === 'ko' ? '화면에 자연스럽게 쓰는 법' : 'How to make it feel natural on screen'}</strong>
                   {stance.onScreenGuidance}
                 </div>
               </div>
@@ -651,9 +604,6 @@ export const EvaluationResults: React.FC<EvaluationResultsProps> = ({
                       }`}
                     >
                       {getSeverityLabel(edit.severity)}
-                    </span>
-                    <span className="text-xs font-bold text-slate-700 uppercase tracking-wider">
-                      {getTypeLabel(edit.type)} {t('fixLabel')}
                     </span>
                   </div>
                   <p className="text-xs text-slate-700 font-medium">{edit.issue}</p>
