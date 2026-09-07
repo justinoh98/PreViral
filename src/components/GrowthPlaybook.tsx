@@ -15,13 +15,13 @@ export const GrowthPlaybook: React.FC = () => {
   return (
     <div className="space-y-6 animate-fadeIn">
       {/* Header */}
-      <div className="bg-white border border-gray-100 rounded-2xl p-6 shadow-sm relative overflow-hidden">
-        <div className="flex items-center gap-3">
+      <div className="bg-white border border-gray-100 rounded-2xl p-4 sm:p-6 shadow-sm relative overflow-hidden">
+        <div className="flex items-start sm:items-center gap-3">
           <div className="p-3 bg-indigo-50 text-indigo-600 rounded-2xl border border-indigo-100">
             <BookOpen className="w-6 h-6" />
           </div>
           <div>
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <h2 className="text-xl font-bold text-slate-900">{t('playbookHeaderTitle')}</h2>
               <span className="px-2 py-0.5 bg-indigo-50 text-indigo-700 border border-indigo-100 rounded text-[10px] font-bold uppercase">
                 {language === 'ko' ? '알고리즘 가이드' : 'Algorithm Standard'}
@@ -56,7 +56,7 @@ export const GrowthPlaybook: React.FC = () => {
       {/* Grid of Core Guidelines */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* I. Anatomy of a Low-Skip Reel */}
-        <div className="bg-white border border-gray-100 rounded-2xl p-6 space-y-4 shadow-sm">
+        <div className="bg-white border border-gray-100 rounded-2xl p-4 sm:p-6 space-y-4 shadow-sm">
           <div className="flex items-center gap-2 border-b border-gray-100 pb-3">
             <Zap className="w-5 h-5 text-indigo-600" />
             <h3 className="text-base font-bold text-slate-900">{t('rule1Title')}</h3>

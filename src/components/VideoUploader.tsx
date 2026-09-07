@@ -685,7 +685,7 @@ export const VideoUploader: React.FC<VideoUploaderProps> = ({
   };
 
   return (
-    <div className="bg-white border border-gray-100 rounded-2xl p-6 shadow-sm text-slate-800">
+    <div className="bg-white border border-gray-100 rounded-2xl p-4 sm:p-6 shadow-sm text-slate-800 min-w-0">
       <canvas ref={canvasRef} className="hidden" />
 
       {/* Header section with Preset quick launcher */}
@@ -723,14 +723,14 @@ export const VideoUploader: React.FC<VideoUploaderProps> = ({
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+      <div className="device-uploader-grid gap-4 sm:gap-6">
         {/* Left Column: Dropzone & Video Player */}
-        <div className="lg:col-span-6 flex flex-col gap-4">
+        <div className="device-uploader-media min-w-0 flex flex-col gap-4">
           {!videoUrl ? (
             <div
               onDragOver={(e) => e.preventDefault()}
               onDrop={handleDrop}
-              className="border-2 border-dashed border-gray-200 hover:border-indigo-500 bg-slate-50/70 hover:bg-slate-50 rounded-2xl p-8 flex flex-col items-center justify-center text-center transition-all group min-h-[320px]"
+              className="border-2 border-dashed border-gray-200 hover:border-indigo-500 bg-slate-50/70 hover:bg-slate-50 rounded-2xl p-5 sm:p-8 flex flex-col items-center justify-center text-center transition-all group min-h-[240px] sm:min-h-[320px]"
             >
               <input
                 ref={fileInputRef}
@@ -780,7 +780,7 @@ export const VideoUploader: React.FC<VideoUploaderProps> = ({
                   onLoadedMetadata={handleLoadedMetadata}
                   onError={handleVideoDecodeError}
                   onEnded={() => setIsPlaying(false)}
-                  className="w-full max-h-[380px] object-contain mx-auto"
+                  className="w-full max-h-[min(55vh,480px)] object-contain mx-auto"
                   playsInline
                   loop
                 />
@@ -839,7 +839,7 @@ export const VideoUploader: React.FC<VideoUploaderProps> = ({
         </div>
 
         {/* Right Column: Metadata & Details Inputs */}
-        <div className="lg:col-span-6 flex flex-col justify-between gap-4">
+        <div className="device-uploader-details min-w-0 flex flex-col justify-between gap-4">
           <div className="space-y-4">
             {/* Title / Reel Name */}
             <div>

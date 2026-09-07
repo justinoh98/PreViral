@@ -24,17 +24,17 @@ export const Navbar: React.FC<NavbarProps> = ({
   const { language, setLanguage, t } = useLanguage();
 
   return (
-    <header className="sticky top-0 z-40 bg-white/95 backdrop-blur-md border-b border-gray-200 text-slate-800 px-4 lg:px-8 py-3 transition-all">
-      <div className="max-w-7xl mx-auto flex flex-col md:flex-row items-center justify-between gap-3">
+    <header className="sticky top-0 z-40 bg-white/95 backdrop-blur-md border-b border-gray-200 text-slate-800 py-2.5 sm:py-3 transition-all">
+      <div className="app-shell flex flex-col xl:flex-row items-center justify-between gap-2.5 sm:gap-3">
         {/* Logo & Brand */}
-        <div className="flex items-center gap-3 w-full md:w-auto justify-between md:justify-start">
+        <div className="flex items-center gap-2 sm:gap-3 w-full xl:w-auto justify-between xl:justify-start min-w-0">
           <div className="flex items-center gap-2.5 cursor-pointer" onClick={() => setActiveTab('eval')}>
             <div className="w-9 h-9 bg-indigo-600 rounded-xl flex items-center justify-center shadow-md shadow-indigo-100">
               <Film className="w-5 h-5 text-white" />
             </div>
             <div>
               <div className="flex items-center gap-1.5">
-                <span className="font-bold text-lg tracking-tight uppercase text-slate-900">
+                <span className="font-bold text-base sm:text-lg tracking-tight uppercase text-slate-900 whitespace-nowrap">
                   {t('brandName')} <span className="text-indigo-600">AI</span>
                 </span>
                 <span className="px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider bg-indigo-50 text-indigo-700 rounded border border-indigo-100">
@@ -48,26 +48,26 @@ export const Navbar: React.FC<NavbarProps> = ({
           </div>
 
           {/* Top Right Mobile Controls */}
-          <div className="md:hidden flex items-center gap-2">
-            <div className="flex items-center gap-1 bg-slate-100 px-2 py-1 rounded-xl border border-slate-200">
+          <div className="xl:hidden flex items-center gap-1.5 sm:gap-2 shrink-0">
+            <div className="flex items-center gap-1 bg-slate-100 px-1.5 sm:px-2 py-1 rounded-xl border border-slate-200">
               <Globe className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
               <select
                 value={language}
                 onChange={(e) => setLanguage(e.target.value as Language)}
-                className="bg-transparent border-none text-xs font-bold text-slate-800 focus:outline-none cursor-pointer pr-1"
+                className="bg-transparent border-none text-xs font-bold text-slate-800 focus:outline-none cursor-pointer w-16 sm:w-auto"
               >
                 <option value="en">English</option>
                 <option value="ko">한국어 (Korean)</option>
               </select>
             </div>
 
-            <div className="flex items-center gap-1 bg-slate-100 px-2.5 py-1 rounded-full border border-slate-200 text-xs text-slate-700">
+            <div className="flex items-center gap-1 bg-slate-100 px-2 sm:px-2.5 py-1 rounded-full border border-slate-200 text-xs text-slate-700">
               <UserCheck className="w-3.5 h-3.5 text-indigo-600" />
               <input
                 type="text"
                 value={creatorHandle}
                 onChange={(e) => setCreatorHandle(e.target.value)}
-                className="bg-transparent border-none text-xs font-semibold focus:outline-none w-20 text-slate-800"
+                className="bg-transparent border-none text-xs font-semibold focus:outline-none w-14 sm:w-20 text-slate-800"
                 placeholder={t('handlePlaceholder')}
               />
             </div>
@@ -75,7 +75,7 @@ export const Navbar: React.FC<NavbarProps> = ({
         </div>
 
         {/* Navigation Tabs */}
-        <nav className="flex items-center gap-1 bg-slate-100/80 p-1 rounded-xl border border-slate-200/80 w-full md:w-auto overflow-x-auto">
+        <nav className="flex items-center gap-1 bg-slate-100/80 p-1 rounded-xl border border-slate-200/80 w-full xl:w-auto overflow-x-auto overscroll-x-contain [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
           <button
             onClick={() => setActiveTab('eval')}
             className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all whitespace-nowrap ${
@@ -85,7 +85,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             }`}
           >
             <Sparkles className="w-3.5 h-3.5" />
-            {t('tabAnalyzer')}
+            <span className="mobile-hide-label">{t('tabAnalyzer')}</span>
           </button>
 
           <button
@@ -97,7 +97,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             }`}
           >
             <BarChart3 className="w-3.5 h-3.5" />
-            {t('tabAnalytics')}
+            <span className="mobile-hide-label">{t('tabAnalytics')}</span>
           </button>
 
           <button
@@ -109,7 +109,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             }`}
           >
             <BookOpen className="w-3.5 h-3.5" />
-            {t('tabPlaybook')}
+            <span className="mobile-hide-label">{t('tabPlaybook')}</span>
           </button>
 
           <button
@@ -121,7 +121,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             }`}
           >
             <History className="w-3.5 h-3.5" />
-            {t('tabHistory')}
+            <span className="mobile-hide-label">{t('tabHistory')}</span>
             {auditCount > 0 && (
               <span className="ml-1 px-1.5 py-0.2 bg-indigo-100 text-indigo-700 rounded-full text-[10px] font-extrabold">
                 {auditCount}
@@ -131,7 +131,7 @@ export const Navbar: React.FC<NavbarProps> = ({
         </nav>
 
         {/* Desktop Creator Handle, Upload CTA & Top-Right Language Option Bar */}
-        <div className="hidden md:flex items-center gap-3">
+        <div className="hidden xl:flex items-center gap-3">
           {/* Top Right Language Option Bar */}
           <div className="flex items-center gap-1.5 bg-slate-100 hover:bg-slate-200/80 px-2.5 py-1.5 rounded-xl border border-slate-200/80 transition-colors">
             <Globe className="w-4 h-4 text-indigo-600 shrink-0" />

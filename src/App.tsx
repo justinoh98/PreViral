@@ -87,7 +87,7 @@ function AppContent() {
       />
 
       {/* Main Content Area */}
-      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-8">
+      <main className="app-shell flex-1 py-4 sm:py-6 lg:py-8 space-y-5 sm:space-y-8">
         {/* Persistent creator loop: submission remains available in every view. */}
         <VideoUploader
           onEvaluationComplete={handleEvaluationComplete}
@@ -140,7 +140,7 @@ function AppContent() {
 
         {/* VIEW 4: Saved Audits Log */}
         {activeTab === 'history' && (
-          <div className="bg-white border border-gray-100 rounded-2xl p-6 shadow-sm space-y-4">
+          <div className="bg-white border border-gray-100 rounded-2xl p-4 sm:p-6 shadow-sm space-y-4">
             <div className="flex items-center justify-between border-b border-gray-100 pb-3">
               <div>
                 <h2 className="text-xl font-bold text-slate-900 flex items-center gap-2">
@@ -192,7 +192,7 @@ function AppContent() {
 
       {/* Footer */}
       <footer className="border-t border-gray-200 bg-white py-6 text-center text-xs text-slate-500">
-        <div className="max-w-7xl mx-auto px-4 flex flex-col sm:flex-row items-center justify-between gap-2">
+        <div className="app-shell flex flex-col sm:flex-row items-center justify-between gap-2">
           <span>Reel Evaluator © 2026 • {language === 'ko' ? '인스타그램 크리에이터를 위한 시청 지속률 & 성장 연구소' : 'High-Retention & Growth Lab for Instagram Creators'}</span>
           <span className="text-slate-400">Built for @{creatorHandle.replace('@', '')}</span>
         </div>
