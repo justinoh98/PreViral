@@ -205,6 +205,9 @@ export const EvaluationResults: React.FC<EvaluationResultsProps> = ({
                   {language === 'ko' ? '가중치 루브릭 적용' : 'Objective Weighted Rubric'}
                 </span>
               </p>
+              <p className="text-[11px] font-semibold text-slate-400">
+                {language === 'ko' ? '평가 척도: 0점 최악 · 5점 탁월하고 완성도 높음' : 'Rating scale: 0 = horrible · 5 = outstanding and polished'}
+              </p>
 
               {evaluation.videoConcept && (
                 <div className="mt-2 text-xs text-slate-700 bg-amber-50/70 border border-amber-200/80 rounded-xl px-3 py-2 flex items-start gap-2 max-w-2xl">

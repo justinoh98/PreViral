@@ -4,57 +4,68 @@ import { VideoUploader } from './components/VideoUploader';
 import { EvaluationResults } from './components/EvaluationResults';
 import { AnalyticsDashboard } from './components/AnalyticsDashboard';
 import { GrowthPlaybook } from './components/GrowthPlaybook';
-import { getPresetReels } from './data/presets';
 import { ReelEvaluation } from './types';
 import { LanguageProvider, useLanguage } from './i18n';
-import { Sparkles, History, Upload, FileText, ArrowRight } from 'lucide-react';
+import { History, ArrowRight, UploadCloud } from 'lucide-react';
+
+const HISTORY_KEY = 'previral:audit-history:v1';
+const PROFILE_KEY = 'previral:creator-profile:v1';
+
+const loadHistory = (): ReelEvaluation[] => {
+  try {
+    const value = localStorage.getItem(HISTORY_KEY);
+    return value ? JSON.parse(value) : [];
+  } catch {
+    return [];
+  }
+};
+
+const normalizeProjectTitle = (title: string) => title
+  .replace(/\s+(?:v|version)\s*\d+.*$/i, '')
+  .replace(/\s*\((?:edited|edit|revision).*\)$/i, '')
+  .trim()
+  .toLowerCase();
 
 function AppContent() {
   const { t, language } = useLanguage();
   const [activeTab, setActiveTab] = useState<'eval' | 'analytics' | 'playbook' | 'history'>('eval');
-  const [creatorHandle, setCreatorHandle] = useState<string>('@legitbricks_');
-  const [creatorNiche, setCreatorNiche] = useState<string>('Toys & Hobbies');
-
-  const initialPresets = getPresetReels(language);
-
-  // Pre-seed with preset evaluation data for instant interactive testing
-  const [history, setHistory] = useState<ReelEvaluation[]>([
-    initialPresets[0].preComputedEvaluation,
-    initialPresets[1].preComputedEvaluation,
-    initialPresets[2].preComputedEvaluation,
-  ]);
-
-  const [currentEvaluation, setCurrentEvaluation] = useState<ReelEvaluation | null>(
-    initialPresets[0].preComputedEvaluation
-  );
+  const savedProfile = (() => {
+    try {
+      return JSON.parse(localStorage.getItem(PROFILE_KEY) || '{}');
+    } catch {
+      return {};
+    }
+  })();
+  const [creatorHandle, setCreatorHandle] = useState<string>(savedProfile.handle || '@legitbricks_');
+  const [creatorNiche] = useState<string>(savedProfile.niche || 'Toys & Hobbies');
+  const [history, setHistory] = useState<ReelEvaluation[]>(loadHistory);
+  const [currentEvaluation, setCurrentEvaluation] = useState<ReelEvaluation | null>(null);
   const [isEvaluating, setIsEvaluating] = useState<boolean>(false);
 
-  // Update preset data in history and currentEvaluation when language changes
   useEffect(() => {
-    const localizedPresets = getPresetReels(language);
-    setHistory((prev) =>
-      prev.map((item) => {
-        const match = localizedPresets.find((p) => p.preComputedEvaluation.id === item.id);
-        return match ? match.preComputedEvaluation : item;
-      })
-    );
+    localStorage.setItem(HISTORY_KEY, JSON.stringify(history.slice(0, 50)));
+  }, [history]);
 
-    setCurrentEvaluation((prev) => {
-      if (!prev) return null;
-      const match = localizedPresets.find((p) => p.preComputedEvaluation.id === prev.id);
-      return match ? match.preComputedEvaluation : prev;
-    });
-  }, [language]);
+  useEffect(() => {
+    localStorage.setItem(PROFILE_KEY, JSON.stringify({ handle: creatorHandle, niche: creatorNiche }));
+  }, [creatorHandle, creatorNiche]);
 
   const handleEvaluationComplete = (evaluation: ReelEvaluation) => {
-    setCurrentEvaluation(evaluation);
-    // Add to history if not already present
+    const family = normalizeProjectTitle(evaluation.title);
+    const earlierVersions = history.filter((item) => normalizeProjectTitle(item.title) === family);
+    const existing = history.find((item) => item.id === evaluation.id);
+    const versionedEvaluation: ReelEvaluation = existing ? evaluation : {
+      ...evaluation,
+      versionTag: evaluation.versionTag || `v${earlierVersions.length + 1}`,
+      parentReelId: evaluation.parentReelId || earlierVersions[0]?.id,
+    };
+    setCurrentEvaluation(versionedEvaluation);
     setHistory((prev) => {
-      const exists = prev.find((item) => item.id === evaluation.id);
+      const exists = prev.find((item) => item.id === versionedEvaluation.id);
       if (exists) {
-        return prev.map((item) => (item.id === evaluation.id ? evaluation : item));
+        return prev.map((item) => (item.id === versionedEvaluation.id ? versionedEvaluation : item));
       }
-      return [evaluation, ...prev];
+      return [versionedEvaluation, ...prev].slice(0, 50);
     });
     setActiveTab('eval');
   };
@@ -77,19 +88,19 @@ function AppContent() {
 
       {/* Main Content Area */}
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-8">
+        {/* Persistent creator loop: submission remains available in every view. */}
+        <VideoUploader
+          onEvaluationComplete={handleEvaluationComplete}
+          onVideoIdentityChange={() => setCurrentEvaluation(null)}
+          isEvaluating={isEvaluating}
+          setIsEvaluating={setIsEvaluating}
+          creatorHandle={creatorHandle}
+          defaultNiche={creatorNiche}
+        />
+
         {/* VIEW 1: Evaluation Lab */}
         {activeTab === 'eval' && (
           <div className="space-y-8">
-            {/* Always-open Video Submission Function */}
-            <VideoUploader
-              onEvaluationComplete={handleEvaluationComplete}
-              onVideoIdentityChange={() => setCurrentEvaluation(null)}
-              isEvaluating={isEvaluating}
-              setIsEvaluating={setIsEvaluating}
-              creatorHandle={creatorHandle}
-              defaultNiche={creatorNiche}
-            />
-
             {/* Evaluation Results Dashboard */}
             {currentEvaluation && (
               <EvaluationResults
@@ -98,6 +109,17 @@ function AppContent() {
                   window.scrollTo({ top: 0, behavior: 'smooth' });
                 }}
               />
+            )}
+            {!currentEvaluation && (
+              <div className="rounded-2xl border border-dashed border-slate-300 bg-white px-6 py-12 text-center shadow-sm">
+                <UploadCloud className="mx-auto h-8 w-8 text-indigo-500" />
+                <h2 className="mt-3 text-base font-bold text-slate-900">
+                  {language === 'ko' ? '첫 릴스를 업로드해 진단을 시작하세요' : 'Upload your first Reel to begin the audit'}
+                </h2>
+                <p className="mx-auto mt-1 max-w-lg text-sm leading-6 text-slate-500">
+                  {language === 'ko' ? '결과는 실제 업로드 영상의 움직임, 전환, 화질, 오디오 신호를 기준으로 생성됩니다.' : 'Results are generated from the uploaded file’s motion, transitions, image quality, and audio evidence.'}
+                </p>
+              </div>
             )}
           </div>
         )}
