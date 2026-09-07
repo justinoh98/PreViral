@@ -15,7 +15,12 @@ interface VideoUploaderProps {
   defaultNiche: string;
 }
 
-const EVALUATION_CACHE_VERSION = 10;
+const EVALUATION_CACHE_VERSION = 11;
+
+interface TimestampedFrameSnapshot {
+  timeSec: number;
+  imageUrl: string;
+}
 
 interface StoredEvaluation {
   scoringVersion: number;
@@ -253,8 +258,8 @@ export const VideoUploader: React.FC<VideoUploaderProps> = ({
   };
 
   // Deep temporal scan: dense opening coverage plus full-timeline sampling.
-  const analyzeVideoFrames = async (): Promise<{ frameSnapshots: string[]; videoMetrics?: VideoMetrics }> => {
-    const snapshots: string[] = [];
+  const analyzeVideoFrames = async (): Promise<{ frameSnapshots: TimestampedFrameSnapshot[]; videoMetrics?: VideoMetrics }> => {
+    const snapshots: TimestampedFrameSnapshot[] = [];
     try {
       if (!videoRef.current || !canvasRef.current) return { frameSnapshots: snapshots };
       const video = videoRef.current;
@@ -273,14 +278,23 @@ export const VideoUploader: React.FC<VideoUploaderProps> = ({
       const originalTime = video.currentTime;
       video.pause();
       const durationValue = Math.max(0.1, video.duration || duration || 1);
-      const uniformCount = Math.min(60, Math.max(18, Math.ceil(durationValue / 0.75) + 1));
+      const uniformCount = Math.min(180, Math.max(24, Math.ceil(durationValue / 0.35) + 1));
       const openingTimes = [0.02, 0.15, 0.35, 0.6, 0.9, 1.3, 1.8, 2.4, 3].filter((time) => time < durationValue);
       const uniformTimes = Array.from({ length: uniformCount }, (_, index) =>
         0.02 + ((durationValue - 0.07) * index) / Math.max(1, uniformCount - 1)
       );
       const sampleTimes = [...new Set([...openingTimes, ...uniformTimes].map((time) => Number(time.toFixed(3))))]
         .sort((left, right) => left - right)
-        .slice(0, 68);
+        .slice(0, 190);
+      const nearestSampleIndex = (target: number) => sampleTimes.reduce(
+        (best, time, index) => Math.abs(time - target) < Math.abs((sampleTimes[best] ?? 0) - target) ? index : best,
+        0
+      );
+      const laterEvidenceTimes = [0.22, 0.42, 0.62, 0.8, 0.98].map((ratio) => durationValue * ratio);
+      const snapshotIndexes = new Set([
+        ...openingTimes.slice(0, 7).map(nearestSampleIndex),
+        ...laterEvidenceTimes.map(nearestSampleIndex),
+      ]);
       const luminanceFrames: Uint8Array[] = [];
       const contrastValues: number[] = [];
       const brightnessValues: number[] = [];
@@ -336,8 +350,16 @@ export const VideoUploader: React.FC<VideoUploaderProps> = ({
         contrastValues.push(Math.min(100, Math.sqrt(variance / luminance.length) / 64 * 100));
         sharpnessValues.push(Math.min(100, edgeDifference / Math.max(1, edgeSamples) / 32 * 100));
         colorfulnessValues.push(Math.min(100, saturationSum / luminance.length * 125));
-        const snapshotStride = Math.max(1, Math.floor(sampleTimes.length / 8));
-        if (index % snapshotStride === 0 || index === sampleTimes.length - 1) snapshots.push(canvas.toDataURL('image/jpeg', 0.82));
+        if (snapshotIndexes.has(index)) {
+          const evidenceCanvas = document.createElement('canvas');
+          evidenceCanvas.width = Math.min(720, sourceWidth);
+          evidenceCanvas.height = Math.max(180, Math.round(evidenceCanvas.width * sourceHeight / sourceWidth));
+          evidenceCanvas.getContext('2d')?.drawImage(video, 0, 0, evidenceCanvas.width, evidenceCanvas.height);
+          snapshots.push({
+            timeSec: Number(target.toFixed(2)),
+            imageUrl: evidenceCanvas.toDataURL('image/jpeg', 0.88),
+          });
+        }
       }
 
       const frameDifference = (left: Uint8Array, right: Uint8Array) => {
@@ -418,7 +440,7 @@ export const VideoUploader: React.FC<VideoUploaderProps> = ({
 
       video.currentTime = originalTime;
       if (!wasPaused) void video.play();
-      return { frameSnapshots: snapshots.slice(0, 9), videoMetrics };
+      return { frameSnapshots: snapshots.slice(0, 12), videoMetrics };
     } catch (err) {
       console.warn('Could not complete deep video scan:', err);
     }
@@ -511,8 +533,11 @@ export const VideoUploader: React.FC<VideoUploaderProps> = ({
         body: JSON.stringify({
           ...auditInput,
           frameSnapshots,
-          hasWatermark: false,
-          detectedAudioSilence: false,
+          // Visual watermark/text placement is judged from timestamped frames.
+          // Audio is not marked clean unless it was actually decoded and measured.
+          hasWatermark: null,
+          detectedAudioSilence: null,
+          audioVerified: false,
           language,
         }),
       });

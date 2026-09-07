@@ -12,6 +12,17 @@ export interface ReelEvaluation {
   audioType: string;
   timestamp: string;
 
+  // Evidence-first audit summary
+  executiveSummary?: string;
+  observedStrengths?: string[];
+  observedWeaknesses?: string[];
+  evidenceSummary?: {
+    sampledFrames: number;
+    analysisMode: 'multimodal' | 'measured-local';
+    audioVerified: boolean;
+    limitations: string[];
+  };
+
   // Overall Ratings
   overallStars: number; // 0.0 to 5.0
   overallScorePercent: number; // 0 to 100

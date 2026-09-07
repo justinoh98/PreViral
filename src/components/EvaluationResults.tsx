@@ -239,6 +239,53 @@ export const EvaluationResults: React.FC<EvaluationResultsProps> = ({
           </div>
         </div>
 
+        {/* Upload-specific editorial verdict, matching the requested long-form feedback style */}
+        {(evaluation.executiveSummary || evaluation.observedStrengths?.length || evaluation.observedWeaknesses?.length) && (
+          <div className="mt-5 grid grid-cols-1 lg:grid-cols-5 gap-4">
+            <div className="lg:col-span-3 rounded-2xl border border-slate-200 bg-slate-950 p-5 text-white">
+              <div className="flex items-center justify-between gap-3 mb-3">
+                <h3 className="text-sm font-extrabold tracking-tight flex items-center gap-2">
+                  <Info className="w-4 h-4 text-indigo-300" />
+                  {language === 'ko' ? '업로드 영상 최종 판정' : 'Upload-Specific Auditor Verdict'}
+                </h3>
+                {evaluation.evidenceSummary && (
+                  <span className="rounded-full border border-slate-700 bg-slate-900 px-2.5 py-1 text-[10px] font-bold text-slate-300">
+                    {evaluation.evidenceSummary.sampledFrames} {language === 'ko' ? '프레임 근거' : 'evidence frames'}
+                  </span>
+                )}
+              </div>
+              <p className="text-sm leading-6 text-slate-200">
+                {evaluation.executiveSummary}
+              </p>
+              {evaluation.evidenceSummary?.limitations?.length ? (
+                <div className="mt-3 border-t border-slate-800 pt-3 text-[11px] leading-5 text-slate-400">
+                  <strong className="text-slate-300">{language === 'ko' ? '검증 한계:' : 'Verification limits:'}</strong>{' '}
+                  {evaluation.evidenceSummary.limitations.join(' · ')}
+                </div>
+              ) : null}
+            </div>
+
+            <div className="lg:col-span-2 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-1 gap-3">
+              <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4">
+                <h4 className="text-xs font-extrabold text-emerald-900 flex items-center gap-1.5 mb-2">
+                  <CheckCircle2 className="w-4 h-4" /> {language === 'ko' ? '실제로 잘 작동하는 점' : 'What Actually Works'}
+                </h4>
+                <ul className="space-y-1.5 text-xs leading-5 text-emerald-950">
+                  {(evaluation.observedStrengths || []).map((item, index) => <li key={index}>• {item}</li>)}
+                </ul>
+              </div>
+              <div className="rounded-2xl border border-rose-200 bg-rose-50 p-4">
+                <h4 className="text-xs font-extrabold text-rose-900 flex items-center gap-1.5 mb-2">
+                  <AlertCircle className="w-4 h-4" /> {language === 'ko' ? '이탈을 만드는 약점' : 'What Causes Drop-Off'}
+                </h4>
+                <ul className="space-y-1.5 text-xs leading-5 text-rose-950">
+                  {(evaluation.observedWeaknesses || []).map((item, index) => <li key={index}>• {item}</li>)}
+                </ul>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Objective Critical Defects Identified */}
         {evaluation.criticalDefectsIdentified && evaluation.criticalDefectsIdentified.length > 0 && (
           <div className="mt-4 bg-rose-50/90 border border-rose-200 rounded-2xl p-4 space-y-2">
@@ -340,7 +387,7 @@ export const EvaluationResults: React.FC<EvaluationResultsProps> = ({
             <div>
               <div className="flex items-start justify-between gap-2 mb-2">
                 <span className="px-2 py-0.5 bg-indigo-50 text-indigo-700 border border-indigo-100 rounded text-[10px] font-extrabold uppercase">
-                  {language === 'ko' ? '0-3초 훅' : '0-3s Hook'}
+                  {language === 'ko' ? '30% · 0-3초 훅' : '30% · 0-3s Hook'}
                 </span>
                 <StarRating rating={evaluation.aspects.hookStrength.stars} size="sm" />
               </div>
@@ -362,7 +409,7 @@ export const EvaluationResults: React.FC<EvaluationResultsProps> = ({
             <div>
               <div className="flex items-start justify-between gap-2 mb-2">
                 <span className="px-2 py-0.5 bg-blue-50 text-blue-700 border border-blue-100 rounded text-[10px] font-extrabold uppercase">
-                  {language === 'ko' ? '편집 페이싱' : 'Pacing & Cuts'}
+                  {language === 'ko' ? '25% · 편집 페이싱' : '25% · Pacing & Cuts'}
                 </span>
                 <StarRating rating={evaluation.aspects.pacingAndStimulation.stars} size="sm" />
               </div>
@@ -390,7 +437,7 @@ export const EvaluationResults: React.FC<EvaluationResultsProps> = ({
             <div>
               <div className="flex items-start justify-between gap-2 mb-2">
                 <span className="px-2 py-0.5 bg-amber-50 text-amber-700 border border-amber-100 rounded text-[10px] font-extrabold uppercase">
-                  {language === 'ko' ? '스토리 결말' : 'Payoff Arc'}
+                  {language === 'ko' ? '20% · 스토리 결말' : '20% · Payoff Arc'}
                 </span>
                 <StarRating rating={evaluation.aspects.narrativeAndPayoff.stars} size="sm" />
               </div>
@@ -418,7 +465,7 @@ export const EvaluationResults: React.FC<EvaluationResultsProps> = ({
             <div>
               <div className="flex items-start justify-between gap-2 mb-2">
                 <span className="px-2 py-0.5 bg-indigo-50 text-indigo-700 border border-indigo-100 rounded text-[10px] font-extrabold uppercase">
-                  {language === 'ko' ? '루프 연결성' : 'Seamless Loop'}
+                  {language === 'ko' ? '15% · 루프 연결성' : '15% · Seamless Loop'}
                 </span>
                 <StarRating rating={evaluation.aspects.loopingAndRetention.stars} size="sm" />
               </div>
@@ -450,7 +497,7 @@ export const EvaluationResults: React.FC<EvaluationResultsProps> = ({
             <div>
               <div className="flex items-start justify-between gap-2 mb-2">
                 <span className="px-2 py-0.5 bg-green-50 text-green-700 border border-green-100 rounded text-[10px] font-extrabold uppercase">
-                  {language === 'ko' ? '기술 규격 & 안전지대' : 'Technical & Safe Zones'}
+                  {language === 'ko' ? '10% · 기술 규격 & 안전지대' : '10% · Technical & Safe Zones'}
                 </span>
                 <StarRating rating={evaluation.aspects.technicalCompliance.stars} size="sm" />
               </div>
