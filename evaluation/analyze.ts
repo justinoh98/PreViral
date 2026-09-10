@@ -1,4 +1,3 @@
-import { randomUUID } from 'node:crypto';
 import { GROUNDING_VERSION, type VideoInventory, type Interpretation, type GroundingReport } from './contracts';
 import { validateRequest, EvaluationError } from './validation';
 import { INVENTORY_PROMPT, VERIFY_INVENTORY_PROMPT, PROMPT_VERSION } from './prompts';
@@ -61,7 +60,7 @@ export async function evaluate(raw: unknown, apiKey: string | undefined, model: 
     const scores = scoreObservations(interpreted.observations);
     const context = { grounding, aspectContext: interpreted.aspectContext };
     const feedback = await dependencies.explain(apiKey, model, structuredClone(interpreted.observations), structuredClone(scores), request, context);
-    const result = adaptEvaluation(request, interpreted.observations, scores, feedback, 'eval-' + randomUUID(), Boolean(cached.transcript), context);
+    const result = adaptEvaluation(request, interpreted.observations, scores, feedback, 'eval-' + crypto.randomUUID(), Boolean(cached.transcript), context);
     return { ...result, isCachedEvaluation: hit };
   } catch (error) {
     if (error instanceof EvaluationError && error.status === 422) {

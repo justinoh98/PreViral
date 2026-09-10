@@ -1,4 +1,3 @@
-import { createHash } from 'node:crypto';
 import { RUBRIC_VERSION, type MediaEvidence } from './contracts';
 import { PROMPT_VERSION } from './prompts';
 
@@ -17,9 +16,8 @@ export class EvaluationCache<T> {
   }
 }
 export function evidenceKey(e: MediaEvidence, model: string): string {
-  const digest = createHash('sha256');
-  digest.update(JSON.stringify([RUBRIC_VERSION, PROMPT_VERSION, model, e.version, e.durationSeconds, e.width, e.height, e.audioStatus, e.audioUnavailableReason, e.samplingMode, e.sourceFingerprint]));
-  for (const frame of e.frames) digest.update(JSON.stringify([frame.id, frame.timeSec, frame.imageUrl]));
-  digest.update(e.audioWav ?? '');
-  return digest.digest('hex');
+  const input = JSON.stringify([RUBRIC_VERSION, PROMPT_VERSION, model, e.version, e.durationSeconds, e.width, e.height, e.audioStatus, e.audioUnavailableReason, e.samplingMode, e.sourceFingerprint, e.frames.map(frame => [frame.id, frame.timeSec, frame.imageUrl]), e.audioWav ?? '']);
+  let hash = 2166136261;
+  for (let i = 0; i < input.length; i++) { hash ^= input.charCodeAt(i); hash = Math.imul(hash, 16777619); }
+  return (hash >>> 0).toString(16).padStart(8, '0');
 }
