@@ -1,0 +1,211 @@
+import React, { useState, useEffect } from 'react';
+import { Navbar } from './components/Navbar';
+import { VideoUploader } from './components/VideoUploader';
+import { EvaluationResults } from './components/EvaluationResults';
+import { AnalyticsDashboard } from './components/AnalyticsDashboard';
+import { GrowthPlaybook } from './components/GrowthPlaybook';
+import { ReelEvaluation } from './types';
+import { LanguageProvider, useLanguage } from './i18n';
+import { History, ArrowRight, UploadCloud } from 'lucide-react';
+
+const HISTORY_KEY = 'previral:audit-history:visual-reset-v1';
+const PROFILE_KEY = 'previral:creator-profile:v1';
+
+const loadHistory = (): ReelEvaluation[] => {
+  try {
+    const value = localStorage.getItem(HISTORY_KEY);
+    return value ? JSON.parse(value) : [];
+  } catch {
+    return [];
+  }
+};
+
+const normalizeProjectTitle = (title: string) => title
+  .replace(/\s+(?:v|version)\s*\d+.*$/i, '')
+  .replace(/\s*\((?:edited|edit|revision).*\)$/i, '')
+  .trim()
+  .toLowerCase();
+
+function AppContent() {
+  const { t, language } = useLanguage();
+  const [activeTab, setActiveTab] = useState<'eval' | 'analytics' | 'playbook' | 'history'>('eval');
+  const savedProfile = (() => {
+    try {
+      return JSON.parse(localStorage.getItem(PROFILE_KEY) || '{}');
+    } catch {
+      return {};
+    }
+  })();
+  const [creatorHandle, setCreatorHandle] = useState<string>(savedProfile.handle || '@legitbricks_');
+  const [creatorNiche] = useState<string>(savedProfile.niche || 'Toys & Hobbies');
+  const [history, setHistory] = useState<ReelEvaluation[]>(loadHistory);
+  const [currentEvaluation, setCurrentEvaluation] = useState<ReelEvaluation | null>(null);
+  const [isEvaluating, setIsEvaluating] = useState<boolean>(false);
+
+  useEffect(() => {
+    localStorage.setItem(HISTORY_KEY, JSON.stringify(history.slice(0, 50)));
+  }, [history]);
+
+  useEffect(() => {
+    localStorage.setItem(PROFILE_KEY, JSON.stringify({ handle: creatorHandle, niche: creatorNiche }));
+  }, [creatorHandle, creatorNiche]);
+
+  const handleEvaluationComplete = (evaluation: ReelEvaluation) => {
+    if (!Number.isFinite(evaluation.overallStars) || !evaluation.aspects) return;
+    const family = normalizeProjectTitle(evaluation.title);
+    const earlierVersions = history.filter((item) => normalizeProjectTitle(item.title) === family);
+    const existing = history.find((item) => item.id === evaluation.id);
+    const versionedEvaluation: ReelEvaluation = existing ? evaluation : {
+      ...evaluation,
+      versionTag: evaluation.versionTag || `v${earlierVersions.length + 1}`,
+      parentReelId: evaluation.parentReelId || earlierVersions[0]?.id,
+    };
+    setCurrentEvaluation(versionedEvaluation);
+    setHistory((prev) => {
+      const exists = prev.find((item) => item.id === versionedEvaluation.id);
+      if (exists) {
+        return prev.map((item) => (item.id === versionedEvaluation.id ? versionedEvaluation : item));
+      }
+      return [versionedEvaluation, ...prev].slice(0, 50);
+    });
+    setActiveTab('eval');
+  };
+
+  return (
+    <div className="min-h-screen bg-slate-50 text-slate-800 font-sans selection:bg-indigo-500 selection:text-white flex flex-col">
+      {/* Top Navbar */}
+      <Navbar
+        activeTab={activeTab}
+        setActiveTab={setActiveTab}
+        creatorHandle={creatorHandle}
+        setCreatorHandle={setCreatorHandle}
+        creatorNiche={creatorNiche}
+        onOpenUpload={() => {
+          setActiveTab('eval');
+          window.scrollTo({ top: 0, behavior: 'smooth' });
+        }}
+        auditCount={history.length}
+      />
+
+      {/* Main Content Area */}
+      <main className="app-shell flex-1 py-4 sm:py-6 lg:py-8 space-y-5 sm:space-y-8">
+        {/* Persistent creator loop: submission remains available in every view. */}
+        <VideoUploader
+          onEvaluationComplete={handleEvaluationComplete}
+          onVideoIdentityChange={() => setCurrentEvaluation(null)}
+          isEvaluating={isEvaluating}
+          setIsEvaluating={setIsEvaluating}
+          creatorHandle={creatorHandle}
+          defaultNiche={creatorNiche}
+        />
+
+        {/* VIEW 1: Evaluation Lab */}
+        {activeTab === 'eval' && (
+          <div className="space-y-8">
+            {/* Evaluation Results Dashboard */}
+            {currentEvaluation && (
+              <EvaluationResults
+                evaluation={currentEvaluation}
+                onReEvaluate={() => {
+                  window.scrollTo({ top: 0, behavior: 'smooth' });
+                }}
+              />
+            )}
+            {!currentEvaluation && (
+              <div className="rounded-2xl border border-dashed border-slate-300 bg-white px-6 py-12 text-center shadow-sm">
+                <UploadCloud className="mx-auto h-8 w-8 text-indigo-500" />
+                <h2 className="mt-3 text-base font-bold text-slate-900">
+                  {language === 'ko' ? '첫 릴스를 업로드해 진단을 시작하세요' : 'Upload your first Reel to begin the audit'}
+                </h2>
+                <p className="mx-auto mt-1 max-w-lg text-sm leading-6 text-slate-500">
+                  {language === 'ko' ? '결과는 실제 업로드 영상의 움직임, 전환, 화질, 오디오 신호를 기준으로 생성됩니다.' : 'Results are generated from the uploaded file’s motion, transitions, image quality, and audio evidence.'}
+                </p>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* VIEW 2: Real-Time Analytics Dashboard */}
+        {activeTab === 'analytics' && (
+          <AnalyticsDashboard
+            history={history}
+            onSelectReel={(reel) => {
+              setCurrentEvaluation(reel);
+              setActiveTab('eval');
+            }}
+          />
+        )}
+
+        {/* VIEW 3: 2026 Growth Playbook */}
+        {activeTab === 'playbook' && <GrowthPlaybook />}
+
+        {/* VIEW 4: Saved Audits Log */}
+        {activeTab === 'history' && (
+          <div className="bg-white border border-gray-100 rounded-2xl p-4 sm:p-6 shadow-sm space-y-4">
+            <div className="flex items-center justify-between border-b border-gray-100 pb-3">
+              <div>
+                <h2 className="text-xl font-bold text-slate-900 flex items-center gap-2">
+                  <History className="w-5 h-5 text-indigo-600" /> {t('historyTitle')}
+                </h2>
+                <p className="text-xs text-slate-500">
+                  {t('historySub')}
+                </p>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {history.map((reel) => (
+                <div
+                  key={reel.id}
+                  onClick={() => {
+                    setCurrentEvaluation(reel);
+                    setActiveTab('eval');
+                  }}
+                  className="bg-slate-50 border border-gray-100 hover:border-indigo-300 rounded-2xl p-4 cursor-pointer transition-all hover:shadow-md flex flex-col justify-between group"
+                >
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="px-2 py-0.5 bg-indigo-50 text-indigo-700 border border-indigo-100 rounded text-[10px] font-bold uppercase">
+                        {reel.niche}
+                      </span>
+                      <span className="text-amber-500 font-bold text-sm">
+                        {reel.overallStars.toFixed(1)} ★
+                      </span>
+                    </div>
+                    <h3 className="font-bold text-sm text-slate-900 group-hover:text-indigo-600 transition-colors">
+                      {reel.title}
+                    </h3>
+                    <p className="text-xs text-slate-500">
+                      {t('durationLabel')}: {reel.durationSeconds}s • {t('skipRateLabel')}: <span className="text-green-600 font-bold">{reel.prediction ? `${reel.prediction.low}–${reel.prediction.high}%` : `${reel.expectedSkipRatePercent}%`}</span>
+                    </p>
+                  </div>
+
+                  <div className="mt-4 pt-3 border-t border-gray-200 flex items-center justify-between text-xs text-indigo-600 font-bold">
+                    <span>{t('viewEvaluation')}</span>
+                    <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </main>
+
+      {/* Footer */}
+      <footer className="border-t border-gray-200 bg-white py-6 text-center text-xs text-slate-500">
+        <div className="app-shell flex flex-col sm:flex-row items-center justify-between gap-2">
+          <span>Reel Evaluator © 2026 • {language === 'ko' ? '인스타그램 크리에이터를 위한 시청 지속률 & 성장 연구소' : 'High-Retention & Growth Lab for Instagram Creators'}</span>
+          <span className="text-slate-400">Built for @{creatorHandle.replace('@', '')}</span>
+        </div>
+      </footer>
+    </div>
+  );
+}
+
+export default function App() {
+  return (
+    <LanguageProvider>
+      <AppContent />
+    </LanguageProvider>
+  );
+}
