@@ -21,9 +21,9 @@ export default {
         return json({ error: error instanceof EvaluationError ? error.code : 'AI_VIDEO_ANALYSIS_FAILED', message: error instanceof EvaluationError ? error.message : 'The video review did not finish. Please retry.', grounding: error instanceof EvaluationError ? error.grounding : undefined }, status);
       }
     }
-    if (env.ASSETS) return env.ASSETS.fetch(request);
     const asset = ASSETS[url.pathname] || (url.pathname === '/' ? ASSETS['/index.html'] : undefined);
-    if (!asset) return new Response('Not found', { status: 404 });
-    return new Response(asset.body, { headers: { 'content-type': asset.type, 'cache-control': 'public, max-age=31536000, immutable' } });
+    if (asset) return new Response(asset.body, { headers: { 'content-type': asset.type, 'cache-control': 'public, max-age=31536000, immutable' } });
+    if (env.ASSETS) return env.ASSETS.fetch(request);
+    return new Response('Not found', { status: 404 });
   },
 };
