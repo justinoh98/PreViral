@@ -1,6 +1,7 @@
 import { evaluate } from '../evaluation/analyze';
 import { EvaluationError } from '../evaluation/validation';
 import { RUBRIC_VERSION, GROUNDING_VERSION } from '../evaluation/contracts';
+import { ASSETS } from './assets';
 
 type Env = { OPENAI_API_KEY?: string; OPENAI_MODEL?: string; ASSETS?: { fetch(request: Request): Promise<Response> } };
 const json = (data: unknown, status = 200) => new Response(JSON.stringify(data), { status, headers: { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' } });
@@ -21,6 +22,8 @@ export default {
       }
     }
     if (env.ASSETS) return env.ASSETS.fetch(request);
-    return new Response('Not found', { status: 404 });
+    const asset = ASSETS[url.pathname] || (url.pathname === '/' ? ASSETS['/index.html'] : undefined);
+    if (!asset) return new Response('Not found', { status: 404 });
+    return new Response(asset.body, { headers: { 'content-type': asset.type, 'cache-control': 'public, max-age=31536000, immutable' } });
   },
 };
