@@ -28,6 +28,7 @@ import { createLocalCaptions } from '../localFallback';
 import { EditPlan } from '../evaluation/EditPlan';
 import { WhatISaw } from '../evaluation/WhatISaw';
 import type { Aspect } from '../../evaluation/contracts';
+import { formatGrowthPrediction } from '../evaluation/predictionDisplay';
 
 function AspectEvidence({ evaluation, aspect, language }: { evaluation: ReelEvaluation; aspect: Aspect; language: string }) {
   const evidence = evaluation.aspectEvidence?.[aspect];
@@ -46,6 +47,7 @@ export const EvaluationResults: React.FC<EvaluationResultsProps> = ({
   onReEvaluate,
 }) => {
   const { t, language } = useLanguage();
+  const growthDisplay = formatGrowthPrediction(evaluation.growthPrediction, evaluation.followerGrowthPotentialPercent, language);
   const [copiedText, setCopiedText] = useState<string | null>(null);
   const [showCaptionsGenerator, setShowCaptionsGenerator] = useState<boolean>(false);
   const [customTopic, setCustomTopic] = useState<string>(evaluation.videoConcept || evaluation.title || '');
@@ -316,18 +318,15 @@ export const EvaluationResults: React.FC<EvaluationResultsProps> = ({
           {/* Unconnected Reach / Follower Potential */}
           <div className="bg-slate-50/80 border border-gray-100 rounded-2xl p-4 flex flex-col justify-between">
             <div className="flex items-center justify-between text-xs text-slate-500 font-bold uppercase tracking-wider mb-1">
-              <span>{evaluation.evaluatorVersion ? (language === 'ko' ? '팔로우 전환 잠재력' : 'Follow potential index') : t('reachForecast')}</span>
+              <span>{evaluation.evaluatorVersion ? (language === 'ko' ? '신규 팔로워 / 도달 가능성' : 'New follower / reach possibility') : t('reachForecast')}</span>
               <TrendingUp className="w-4 h-4 text-indigo-600" />
             </div>
-            <div className="flex items-baseline gap-2">
-              <span className="text-2xl font-bold text-indigo-600">
-                {evaluation.followerGrowthPotentialPercent > 60
-                  ? (language === 'ko' ? '높음' : 'High')
-                  : (language === 'ko' ? '보통' : 'Moderate')}
-              </span>
-              <span className="text-[10px] text-slate-400 font-medium">
-                {evaluation.followerGrowthPotentialPercent == null ? '—' : `${evaluation.followerGrowthPotentialPercent}${evaluation.evaluatorVersion ? '/100' : '%'}`} {evaluation.evaluatorVersion ? '' : t('potential')}
-              </span>
+            <div>
+              <div className="flex items-baseline gap-2">
+                <span className="text-2xl font-bold text-indigo-600">{growthDisplay.range}</span>
+                <span className="text-[10px] text-slate-400 font-medium">{growthDisplay.detail}</span>
+              </div>
+              {growthDisplay.explanation && <p className="mt-1 text-[10px] leading-4 text-slate-500">{growthDisplay.explanation}</p>}
             </div>
           </div>
 

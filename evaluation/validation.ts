@@ -1,4 +1,4 @@
-import { ASPECTS, TRAITS, LEVELS, EVIDENCE_VERSION, type Observations, type MediaEvidence, type Feedback, type EvaluationRequest } from './contracts';
+import { ANALYZER_VERSION, ASPECTS, TRAITS, LEVELS, EVIDENCE_VERSION, type EvidenceAnalysis, type Observations, type MediaEvidence, type Feedback, type EvaluationRequest } from './contracts';
 import { isTargetNiche } from './niches';
 
 export class EvaluationError extends Error {
@@ -61,7 +61,7 @@ export function validateShape(value: unknown, schema: Schema, path = 'response')
 }
 
 export function validateEvidence(e: MediaEvidence): void {
-  if (e?.sourceFingerprint !== undefined && (typeof e.sourceFingerprint !== 'string' || !/^\d+-[a-f0-9]{8}-[a-f0-9]{8}$/.test(e.sourceFingerprint))) throw new EvaluationError('INVALID_VIDEO', 'The uploaded video identity is invalid.');
+  if (e?.sourceFingerprint !== undefined && (typeof e.sourceFingerprint !== 'string' || !/^sha256-[a-f0-9]{64}$/.test(e.sourceFingerprint))) throw new EvaluationError('INVALID_VIDEO', 'The uploaded video identity is invalid.');
   if (!e || e.version !== EVIDENCE_VERSION || !Number.isFinite(e.durationSeconds) || e.durationSeconds <= 0 || e.durationSeconds > 300 || !Number.isInteger(e.width) || !Number.isInteger(e.height) || e.width <= 0 || e.height <= 0) throw new EvaluationError('INVALID_VIDEO', 'This video could not be read reliably. Use a playable video of up to five minutes.');
   if (!Array.isArray(e.frames) || e.frames.length < 4 || e.frames.length > 96) throw new EvaluationError('INSUFFICIENT_EVIDENCE', 'Not enough of the video could be read. Please retry.');
   let previous = -1;
@@ -74,6 +74,36 @@ export function validateEvidence(e: MediaEvidence): void {
   const maxGap = Math.max(.65, e.durationSeconds / 30);
   if (e.frames.some((f, i) => i > 0 && f.timeSec - e.frames[i - 1].timeSec > maxGap * 1.25)) throw new EvaluationError('INSUFFICIENT_EVIDENCE', 'A section of the video was not captured. Please retry.');
   if (!['provided', 'unavailable', 'absent'].includes(e.audioStatus) || (e.audioStatus === 'provided' && !e.audioWav) || (e.audioWav && !/^data:audio\/wav;base64,[A-Za-z0-9+/=]+$/.test(e.audioWav)) || (e.audioWav?.length ?? 0) > 16_000_000) throw new EvaluationError('INVALID_AUDIO', 'The audio could not be read.');
+  if (e.analysis) validateLocalAnalysis(e.analysis, e);
+}
+
+function validateLocalAnalysis(analysis: EvidenceAnalysis, evidence: MediaEvidence): void {
+  const fail = () => { throw new EvaluationError('INVALID_VIDEO', 'The local evidence analysis is invalid or does not match this upload.'); };
+  if (!evidence.sourceFingerprint || analysis.version !== ANALYZER_VERSION || analysis.schemaVersion !== EVIDENCE_VERSION || analysis.sourceFingerprint !== evidence.sourceFingerprint || analysis.provenance !== 'measured_local') fail();
+  if (!Array.isArray(analysis.measurements) || analysis.measurements.length < 2 || analysis.measurements.length > 1230) fail();
+  const measurements = new Map(analysis.measurements.map(row => [row.id, row]));
+  if (measurements.size !== analysis.measurements.length) fail();
+  let previous = -1;
+  for (const row of analysis.measurements) {
+    if (!Number.isFinite(row.timeSec) || row.timeSec <= previous || row.timeSec < 0 || row.timeSec > evidence.durationSeconds) fail();
+    previous = row.timeSec;
+    for (const value of [row.brightness, row.contrast, row.sharpness, row.blockiness, row.visualChangeFromPrevious, row.luminanceChangeFromPrevious, row.edgeChangeFromPrevious]) if (!Number.isFinite(value) || value < 0 || value > 1) fail();
+  }
+  if (analysis.measurements[0].timeSec > .08 || evidence.durationSeconds - analysis.measurements.at(-1)!.timeSec > .05) fail();
+  const frameIds = new Set(evidence.frames.map(frame => frame.id));
+  if (analysis.firstFrame.id !== evidence.frames[0].id || analysis.endingFrame.id !== evidence.frames.at(-1)!.id || analysis.firstFrame.measurementId !== analysis.measurements[0].id || analysis.endingFrame.measurementId !== analysis.measurements.at(-1)!.id) fail();
+  const shots = new Map(analysis.shots.map(shot => [shot.id, shot]));
+  if (!analysis.shots.length || shots.size !== analysis.shots.length || analysis.shots[0].startSec !== 0 || Math.abs(analysis.shots.at(-1)!.endSec - evidence.durationSeconds) > .001) fail();
+  for (const shot of analysis.shots) {
+    if (shot.startSec < 0 || shot.endSec <= shot.startSec || Math.abs(shot.durationSec - (shot.endSec - shot.startSec)) > .002 || !measurements.has(shot.representativeMeasurementId) || !shot.representativeFrameId || !frameIds.has(shot.representativeFrameId) || shot.measurementIds.some(id => !measurements.has(id)) || !measurements.has(shot.boundary.measurementId)) fail();
+  }
+  if (analysis.repeatedShotCandidates.some(candidate => candidate.provenance !== 'measured_local' || candidate.shotIds.some(id => !shots.has(id)))) fail();
+  for (const window of [analysis.opening, analysis.endingTail]) if (!window.measurementIds.length || window.measurementIds.some(id => !measurements.has(id))) fail();
+  if (analysis.startEndSimilarity.provenance !== 'measured_local' || analysis.startEndSimilarity.evidenceIds.some(id => !frameIds.has(id))) fail();
+  if (!Array.isArray(analysis.capabilities) || !analysis.capabilities.length || new Set(analysis.capabilities.map(item => item.id)).size !== analysis.capabilities.length) fail();
+  if (evidence.audioStatus === 'provided' && analysis.audio.trackState !== 'available') fail();
+  if (evidence.audioStatus === 'absent' && analysis.audio.trackState !== 'absent') fail();
+  if (evidence.audioStatus === 'unavailable' && analysis.audio.trackState !== 'unavailable') fail();
 }
 
 export function validateRequest(raw: unknown): EvaluationRequest {

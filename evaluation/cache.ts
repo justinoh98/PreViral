@@ -1,5 +1,7 @@
-import { RUBRIC_VERSION, type MediaEvidence } from './contracts';
+import { EVALUATION_VERSION_BOUNDARIES, type MediaEvidence } from './contracts';
 import { PROMPT_VERSION } from './prompts';
+
+export const CACHE_VERSION_BOUNDARY = EVALUATION_VERSION_BOUNDARIES;
 
 // Bounded memory only. No video files, keys or transient failures are persisted.
 export class EvaluationCache<T> {
@@ -16,7 +18,7 @@ export class EvaluationCache<T> {
   }
 }
 export function evidenceKey(e: MediaEvidence, model: string): string {
-  const input = JSON.stringify([RUBRIC_VERSION, PROMPT_VERSION, model, e.version, e.durationSeconds, e.width, e.height, e.audioStatus, e.audioUnavailableReason, e.samplingMode, e.sourceFingerprint, e.frames.map(frame => [frame.id, frame.timeSec, frame.imageUrl]), e.audioWav ?? '']);
+  const input = JSON.stringify([CACHE_VERSION_BOUNDARY, PROMPT_VERSION, model, e.version, e.analysis?.version, e.durationSeconds, e.width, e.height, e.audioStatus, e.audioUnavailableReason, e.samplingMode, e.sourceFingerprint, e.frames.map(frame => [frame.id, frame.timeSec, frame.imageUrl]), e.audioWav ?? '']);
   let hash = 2166136261;
   for (let i = 0; i < input.length; i++) { hash ^= input.charCodeAt(i); hash = Math.imul(hash, 16777619); }
   return (hash >>> 0).toString(16).padStart(8, '0');

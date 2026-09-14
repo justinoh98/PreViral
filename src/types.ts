@@ -1,10 +1,12 @@
-import type { Feedback, ScoreResult, GroundingReport, Aspect, AspectContext } from '../evaluation/contracts';
+import type { Feedback, ScoreResult, GroundingReport, Aspect, AspectContext, EvidenceAnalysis, GrowthPrediction } from '../evaluation/contracts';
 export interface ReelEvaluation {
   grounding?: GroundingReport;
   aspectEvidence?: Record<Aspect, AspectContext>;
   evaluatorVersion?: string;
   prediction?: ScoreResult['skipEstimate'];
+  growthPrediction?: GrowthPrediction;
   conversionIndex?: number | null;
+  localEvidence?: EvidenceAnalysis;
   editPlan?: Feedback;
   id: string;
   title: string;

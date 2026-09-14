@@ -5,9 +5,13 @@ import { SafeZoneOverlay } from './SafeZoneOverlay';
 import { useLanguage } from '../i18n';
 import { captureMediaEvidence } from '../evaluation/mediaEvidence';
 import { RUBRIC_VERSION } from '../../evaluation/contracts';
-import type { GroundingReport } from '../../evaluation/contracts';
+import type { EvidenceAnalysis, Frame, GroundingReport } from '../../evaluation/contracts';
 import { isTargetNiche } from '../../evaluation/niches';
 import { WhatISaw } from '../evaluation/WhatISaw';
+import { createVideoFingerprint } from '../evaluation/videoFingerprint';
+import { evaluationCacheKey, readCachedEvaluation, stableEvaluationId, writeCachedEvaluation } from '../evaluation/localCache';
+import { EvidenceDebugView } from '../evaluation/EvidenceDebugView';
+import { shouldShowEvidenceDebug } from '../evaluation/evidenceDebug';
 
 interface VideoUploaderProps {
   onEvaluationComplete: (evaluation: ReelEvaluation) => void;
@@ -48,6 +52,8 @@ export const VideoUploader: React.FC<VideoUploaderProps> = ({
   const [videoError, setVideoError] = useState<string>('');
   const [evaluationError, setEvaluationError] = useState<string>('');
   const [groundingFailure, setGroundingFailure] = useState<GroundingReport | null>(null);
+  const [localEvidence, setLocalEvidence] = useState<EvidenceAnalysis | null>(null);
+  const [localFrames, setLocalFrames] = useState<Frame[]>([]);
   const [aiAvailable, setAiAvailable] = useState<boolean | null>(null);
   const [aiProvider, setAiProvider] = useState<string>('');
   useEffect(() => {
@@ -67,43 +73,6 @@ export const VideoUploader: React.FC<VideoUploaderProps> = ({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const fileSelectionRef = useRef<number>(0);
 
-  const checksumTable = useRef<Uint32Array | null>(null);
-
-  const getChecksumTable = () => {
-    if (checksumTable.current) return checksumTable.current;
-    const table = new Uint32Array(256);
-    for (let n = 0; n < 256; n += 1) {
-      let value = n;
-      for (let bit = 0; bit < 8; bit += 1) {
-        value = (value & 1) ? (0xedb88320 ^ (value >>> 1)) : (value >>> 1);
-      }
-      table[n] = value >>> 0;
-    }
-    checksumTable.current = table;
-    return table;
-  };
-
-  // Reads every byte without loading the whole video into memory. File names and
-  // timestamps are deliberately excluded, so renaming an unchanged video keeps
-  // its original evaluation while any byte-level edit creates a new identity.
-  const createContentFingerprint = async (file: File) => {
-    const table = getChecksumTable();
-    const reader = file.stream().getReader();
-    let crc = 0xffffffff;
-    let fnv = 0x811c9dc5;
-
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      for (let index = 0; index < value.length; index += 1) {
-        const byte = value[index];
-        crc = (crc >>> 8) ^ table[(crc ^ byte) & 0xff];
-        fnv = Math.imul(fnv ^ byte, 0x01000193) >>> 0;
-      }
-    }
-
-    return `${file.size}-${((crc ^ 0xffffffff) >>> 0).toString(16).padStart(8, '0')}-${fnv.toString(16).padStart(8, '0')}`;
-  };
 
   // Device media is requested only after an explicit user action. The browser's
   // native picker grants access only to the file the user selects.
@@ -139,6 +108,8 @@ export const VideoUploader: React.FC<VideoUploaderProps> = ({
   const processSelectedFile = async (file: File) => {
     setEvaluationError('');
     setGroundingFailure(null);
+    setLocalEvidence(null);
+    setLocalFrames([]);
     if (!isSupportedVideoFile(file)) {
       setVideoError(language === 'ko'
         ? '지원되는 동영상 파일(MP4, MOV, AVI, WebM, MKV)을 선택해 주세요.'
@@ -168,7 +139,7 @@ export const VideoUploader: React.FC<VideoUploaderProps> = ({
     const ext = file.name.split('.').pop()?.toUpperCase() || 'MP4';
     setFileFormat(ext);
     try {
-      const fingerprint = await createContentFingerprint(file);
+      const fingerprint = await createVideoFingerprint(file);
       if (fileSelectionRef.current === selectionId) setVideoContentHash(fingerprint);
     } catch (error) {
       console.warn('Could not fingerprint the selected video:', error);
@@ -221,16 +192,25 @@ export const VideoUploader: React.FC<VideoUploaderProps> = ({
     setIsEvaluating(true);
     try {
       if (!isTargetNiche(niche)) throw new Error(language === 'ko' ? '목록에서 타깃 분야를 선택해 주세요.' : 'Choose a Target Niche from the list.');
+      const cacheKey = evaluationCacheKey({ fingerprint: videoContentHash, niche, language, captionInput, videoConcept, audioType });
+      try {
+        const cached = await readCachedEvaluation(cacheKey);
+        if (cached) {
+          onEvaluationComplete({ ...cached, title: videoTitle, fileFormat, fileSizeMb, timestamp: new Date().toISOString(), isCachedEvaluation: true });
+          return;
+        }
+      } catch (error) { console.warn('Could not read the local exact-content cache:', error); }
+      setEvalProgressText(language === 'ko' ? '영상 전체의 흐름을 읽는 중...' : 'Reading the Reel from beginning to end...');
+      const evidence = await captureMediaEvidence(videoUrl, videoFile, videoContentHash, progress => setEvalProgressText(language === 'ko' ? `영상의 흐름과 장면 확인 중… ${Math.round(progress * 100)}%` : `Reading the footage and scene changes… ${Math.round(progress * 100)}%`));
+      setLocalEvidence(evidence.analysis || null);
+      setLocalFrames(evidence.frames);
+      if (selection !== fileSelectionRef.current) return;
       const statusResponse = await fetch('/api/evaluator-status', { signal: AbortSignal.timeout(10000) });
       if (!statusResponse.ok || !(statusResponse.headers.get('content-type') || '').includes('application/json')) throw new Error(language === 'ko' ? '이 사이트의 영상 분석 서버가 연결되어 있지 않습니다.' : 'The video analysis server is not connected to this site.');
       const status = await statusResponse.json();
       setAiAvailable(status.available === true);
       setAiProvider(status.provider || '');
-      if (!status.available) throw new Error(language === 'ko' ? '영상 분석 서비스가 아직 연결되지 않았습니다. 임의의 점수는 생성하지 않습니다. 연결 후 다시 시도해 주세요.' : 'Video analysis is not connected yet. No substitute rating will be generated. Retry after the server is connected.');
-      setEvalProgressText(language === 'ko' ? '영상 전체의 흐름을 읽는 중...' : 'Reading the Reel from beginning to end...');
-      const evidence = await captureMediaEvidence(videoUrl, videoFile, progress => setEvalProgressText(language === 'ko' ? `영상의 흐름과 장면 확인 중… ${Math.round(progress * 100)}%` : `Reading the footage and scene changes… ${Math.round(progress * 100)}%`));
-      evidence.sourceFingerprint = videoContentHash;
-      if (selection !== fileSelectionRef.current) return;
+      if (!status.available) throw new Error(language === 'ko' ? '로컬 영상 근거는 준비되었지만 의미 분석과 점수 생성은 아직 연결되지 않았습니다. 임의의 점수는 생성하지 않습니다.' : 'Local video evidence is ready, but semantic review and scoring are not connected yet. No substitute rating was generated.');
       setEvalProgressText(language === 'ko' ? '보이는 내용을 검토하고 편집 계획을 작성하는 중...' : 'Reviewing the footage and preparing your editing plan...');
       const response = await fetch('/api/evaluate-reel', {
         method: 'POST', headers: { 'Content-Type': 'application/json' }, signal: AbortSignal.timeout(1200000),
@@ -243,7 +223,10 @@ export const VideoUploader: React.FC<VideoUploaderProps> = ({
       if (!response.ok && data.grounding) setGroundingFailure(data.grounding);
       if (!response.ok) throw new Error(data.message || (language === 'ko' ? '분석을 완료하지 못했습니다. 임의의 점수는 생성하지 않았습니다.' : 'The video review did not finish. No substitute score was generated.'));
       if (data.evaluatorVersion !== RUBRIC_VERSION || !Number.isFinite(data.overallStars) || !data.editPlan) throw new Error('The server returned an incompatible evaluation. Please retry after restarting the current app.');
-      if (selection === fileSelectionRef.current) onEvaluationComplete(data);
+      const evaluation = { ...data, id: stableEvaluationId(cacheKey), localEvidence: evidence.analysis, isCachedEvaluation: false } as ReelEvaluation;
+      try { await writeCachedEvaluation(cacheKey, evaluation); }
+      catch (error) { console.warn('Could not store the exact-content evaluation cache:', error); }
+      if (selection === fileSelectionRef.current) onEvaluationComplete(evaluation);
     } catch (error) {
       if (selection === fileSelectionRef.current) setEvaluationError(error instanceof Error ? error.message : 'The video could not be reviewed. Please retry.');
     } finally { setIsEvaluating(false); }
@@ -374,6 +357,8 @@ export const VideoUploader: React.FC<VideoUploaderProps> = ({
                     setVideoContentHash('');
                     setVideoTitle('');
                     setVideoError('');
+                    setLocalEvidence(null);
+                    setLocalFrames([]);
                     onVideoIdentityChange();
                     setVideoConcept('');
                   }}
@@ -554,6 +539,7 @@ export const VideoUploader: React.FC<VideoUploaderProps> = ({
           </div>
         </div>
       </div>
+      {shouldShowEvidenceDebug(window.location.search) && localEvidence && <EvidenceDebugView fingerprint={videoContentHash} evidence={localEvidence} frames={localFrames} />}
     </div>
   );
 };

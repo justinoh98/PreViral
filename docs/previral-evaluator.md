@@ -23,7 +23,7 @@ Regression tests include all ten niche values, cross-niche cache separation, con
 
 ## Source rubric
 
-reference-old/server.ts defines the prompt rubric at line 303 and weighted calculation at line 700 (before this change). The original weights are Hook 30%, Pacing 25%, Narrative/Payoff 20%, Loop/Retention 15%, Technical 10%. The prior current server and localFallback used the same weights. The reference prompt called aspect five “Technical & Unconnected Reach”; the current implementation calls it “Technical Compliance & Safe Zone”. This implementation keeps current's five aspect keys and technical scope, with non-follower/share potential estimated separately. Visual interest is evidence for pacing and appeal, not a sixth aspect.
+reference-old/server.ts defines the prompt rubric at line 303 and weighted calculation at line 700 (before this change). The original weights are Hook 30%, Pacing 25%, Narrative/Payoff 20%, Loop/Retention 15%, Technical & Unconnected Reach 10%. The internal compatibility key remains `technicalCompliance`, but the canonical user-facing fifth-aspect name is “Technical & Unconnected Reach”. Its exact internal relationship to technical quality, non-follower accessibility and shareability is deferred to the separately approved scoring-reconciliation phase. Phase 0–2 preserve current trait membership and numerical behavior. Visual interest is evidence for pacing and appeal, not a sixth aspect.
 
 ## Numerical rubric
 

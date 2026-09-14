@@ -1,7 +1,15 @@
 // Versioned evaluator contracts. The model describes evidence; it never supplies stars.
 export const RUBRIC_VERSION = 'previral-creative-v1';
-export const EVIDENCE_VERSION = 'ordered-frames-audio-v2';
+export const EVIDENCE_SCHEMA_VERSION = 'ordered-frames-analysis-v3';
+export const EVIDENCE_VERSION = EVIDENCE_SCHEMA_VERSION;
+export const ANALYZER_VERSION = 'local-media-signals-v2';
 export const GROUNDING_VERSION = 'video-grounding-v3';
+export const EVALUATION_VERSION_BOUNDARIES = Object.freeze({
+  evidenceSchema: EVIDENCE_SCHEMA_VERSION,
+  analyzer: ANALYZER_VERSION,
+  sourceRules: 'source-rules-v1',
+  rubric: RUBRIC_VERSION,
+});
 import type { TargetNiche } from './niches';
 export const ASPECTS = ['hookStrength', 'pacingAndStimulation', 'narrativeAndPayoff', 'loopingAndRetention', 'technicalCompliance'] as const;
 export type Aspect = typeof ASPECTS[number];
@@ -10,11 +18,65 @@ export type Trait = typeof TRAITS[number];
 export const LEVELS = ['ineffective', 'weak', 'below_average', 'competent', 'strong', 'excellent', 'exceptional', 'outstanding', 'unknown', 'not_applicable'] as const;
 export type Level = typeof LEVELS[number];
 export type Confidence = 'high' | 'medium' | 'low';
+export type EvidenceState = 'available' | 'unavailable' | 'unknown';
+export type EvidenceValueState = 'observed' | 'not_observed' | 'unknown' | 'unavailable' | 'not_applicable';
+export type MeasurementProvenance = 'measured_local' | 'ocr_local' | 'transcript_local' | 'semantic_local' | 'semantic_remote';
+export type EvidenceValue<T> = { state: EvidenceValueState; value: T | null; confidence: Confidence; evidenceIds: string[]; provenance: MeasurementProvenance; limitation?: string };
+export type CapabilityReport = {
+  id: string; version: string; state: EvidenceState; mode: 'required' | 'optional' | 'experimental';
+  provenance: MeasurementProvenance; limitations: string[];
+};
 export type Frame = { id: string; timeSec: number; imageUrl: string };
+export type VisualMeasurement = {
+  id: string; sourceFrameId: string; timeSec: number; perceptualHash: string;
+  brightness: number; contrast: number; sharpness: number; blockiness: number;
+  visualChangeFromPrevious: number; luminanceChangeFromPrevious: number; edgeChangeFromPrevious: number;
+};
+export type BoundaryEvidence = { kind: 'start' | 'candidate_transition' | 'candidate_hard_cut'; confidence: number; measurementId: string };
+export type ShotEvidence = {
+  id: string; startSec: number; endSec: number; durationSec: number; measurementIds: string[];
+  representativeMeasurementId: string; representativeFrameId: string | null; boundary: BoundaryEvidence;
+  withinShotVisualChange: { mean: number; max: number };
+  quality: { brightness: number; contrast: number; sharpness: number; blockiness: number };
+  similarShotIds: string[];
+};
+export type RepeatedShotCandidate = { id: string; shotIds: string[]; similarity: number; confidence: Confidence; provenance: 'measured_local' };
+export type ActivityWindow = {
+  id: string; startSec: number; endSec: number; measurementIds: string[];
+  meanVisualChange: number; maxVisualChange: number; activityLevel: 'low' | 'medium' | 'high';
+};
+export type SimilarityMeasurement = EvidenceValue<number> & { id: string };
+export type TechnicalEvidence = {
+  frameCount: number; meanBrightness: number; meanContrast: number; meanSharpness: number; meanBlockiness: number;
+  underexposedRatio: number; overexposedRatio: number; lowContrastRatio: number; lowSharpnessRatio: number;
+};
+export type AudioAnalysis = {
+  version: string; trackState: 'available' | 'absent' | 'unavailable'; sampleRate: number | null; durationSeconds: number | null;
+  onsetDelaySec: EvidenceValue<number>;
+  envelope: Array<{ id: string; startSec: number; endSec: number; rms: number; peak: number; active: boolean }>;
+  silenceIntervals: Array<{ id: string; startSec: number; endSec: number; confidence: Confidence }>;
+  changePoints: Array<{ id: string; timeSec: number; magnitude: number; confidence: Confidence }>;
+  trailingSilenceCandidate: EvidenceValue<boolean>; activeAtCutoffCandidate: EvidenceValue<boolean>;
+  provenance: 'measured_local'; limitations: string[];
+};
+export type TextAnalysis = {
+  state: 'observed' | 'not_observed' | 'unknown' | 'unavailable'; version: string;
+  detections: Array<{ id: string; startSec: number; endSec: number; bounds: { x: number; y: number; width: number; height: number }; confidence: number; wording: string | null; safeZoneOverlap: boolean | null }>;
+  provenance: 'ocr_local'; limitations: string[];
+};
+export type EvidenceAnalysis = {
+  version: string; schemaVersion: string; sourceFingerprint: string; provenance: 'measured_local'; capabilities: CapabilityReport[];
+  measurements: VisualMeasurement[]; shots: ShotEvidence[]; repeatedShotCandidates: RepeatedShotCandidate[];
+  firstFrame: { id: string; measurementId: string; timeSec: number };
+  endingFrame: { id: string; measurementId: string; timeSec: number };
+  opening: ActivityWindow; endingTail: ActivityWindow; startEndSimilarity: SimilarityMeasurement;
+  technical: TechnicalEvidence; audio: AudioAnalysis; text: TextAnalysis; limitations: string[];
+};
 export type MediaEvidence = {
   version: string; durationSeconds: number; width: number; height: number;
   frames: Frame[]; audioWav?: string; audioStatus: 'provided' | 'unavailable' | 'absent';
   audioUnavailableReason?: string; samplingMode?: 'adaptive' | 'uniform'; sourceFingerprint?: string;
+  analysis?: EvidenceAnalysis;
 };
 export type Judgment = { level: Level; confidence: Confidence; reason: string; frameIds: string[] };
 export type Scene = { id: string; section: 'opening' | 'middle' | 'ending'; description: string; frameIds: string[] };
@@ -75,6 +137,10 @@ export type ScoreResult = {
   skipEstimate: { low: number; high: number; midpoint: number; band: 'low' | 'moderate' | 'high' | 'very_high'; basis: 'heuristic_not_empirically_calibrated' };
   nonFollowerInterestStars: number | null; conversionIndex: number | null; shareabilityIndex: number | null;
   appliedRules: Array<{ aspect: Aspect; rule: string }>;
+};
+export type GrowthPrediction = {
+  low: number; high: number; midpoint: number; confidence: Confidence;
+  basis: 'heuristic_not_empirically_calibrated'; explanation: string;
 };
 export type EvaluationRequest = {
   title: string; niche: TargetNiche; captionInput: string; videoConcept: string; audioType: string;
