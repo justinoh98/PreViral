@@ -4,11 +4,23 @@ export const EVIDENCE_SCHEMA_VERSION = 'ordered-frames-analysis-v3';
 export const EVIDENCE_VERSION = EVIDENCE_SCHEMA_VERSION;
 export const ANALYZER_VERSION = 'local-media-signals-v2';
 export const GROUNDING_VERSION = 'video-grounding-v3';
+export const SEMANTIC_SCHEMA_VERSION = 'semantic-observations-v1';
+export const INVENTORY_SCHEMA_VERSION = 'semantic-inventory-v1';
+export const EXTRACTOR_SCHEMA_VERSION = 'semantic-extractors-v1';
+export const RULE_APPLICABILITY_VERSION = 'rule-applicability-v1';
+export const CALIBRATION_VERSION = 'semantic-calibration-v1';
 export const EVALUATION_VERSION_BOUNDARIES = Object.freeze({
   evidenceSchema: EVIDENCE_SCHEMA_VERSION,
   analyzer: ANALYZER_VERSION,
   sourceRules: 'source-rules-v1',
   rubric: RUBRIC_VERSION,
+  semantic: Object.freeze({
+    schema: SEMANTIC_SCHEMA_VERSION,
+    inventory: INVENTORY_SCHEMA_VERSION,
+    extractors: EXTRACTOR_SCHEMA_VERSION,
+    applicability: RULE_APPLICABILITY_VERSION,
+    calibration: CALIBRATION_VERSION,
+  }),
 });
 import type { TargetNiche } from './niches';
 export const ASPECTS = ['hookStrength', 'pacingAndStimulation', 'narrativeAndPayoff', 'loopingAndRetention', 'technicalCompliance'] as const;
@@ -22,6 +34,70 @@ export type EvidenceState = 'available' | 'unavailable' | 'unknown';
 export type EvidenceValueState = 'observed' | 'not_observed' | 'unknown' | 'unavailable' | 'not_applicable';
 export type MeasurementProvenance = 'measured_local' | 'ocr_local' | 'transcript_local' | 'semantic_local' | 'semantic_remote';
 export type EvidenceValue<T> = { state: EvidenceValueState; value: T | null; confidence: Confidence; evidenceIds: string[]; provenance: MeasurementProvenance; limitation?: string };
+export type SemanticState = 'observed' | 'not_observed' | 'unknown' | 'not_applicable';
+export type SemanticProvenance = 'measured_local' | 'ocr_local' | 'transcript_local' | 'semantic_local' | 'user_context';
+export type CapabilityTier = 'high' | 'medium' | 'low';
+export type LocalExecutionProvider = 'webgpu' | 'wasm' | 'none';
+export type SemanticConfidence = { value: number; level: Confidence; calibrationVersion: string };
+export type SemanticExtractorManifest = {
+  id: string; version: string; state: 'available' | 'unavailable' | 'failed';
+  purpose: string; runtime: string; runtimeRevision: string | null;
+  executionProvider: LocalExecutionProvider; limitations: string[];
+};
+export type SemanticModelManifest = {
+  id: string; revision: string; checksum: string; license: string;
+  quantization: string | null; executionProvider: Exclude<LocalExecutionProvider, 'none'>;
+  assetBytes: number; cached: boolean;
+};
+export type SemanticRuntimeQualification = {
+  version: 'semantic-runtime-capabilities-v1'; tier: CapabilityTier;
+  webgpu: { state: EvidenceState }; wasm: { state: EvidenceState; simd: boolean }; worker: { state: EvidenceState };
+  constrained: boolean;
+  warmupProfile: { id: string; revision: string; checksum: string; assetBytes: number; peakBytes: number; largestBufferBytes: number; providers: Array<Exclude<LocalExecutionProvider, 'none'>> } | null;
+};
+export type SemanticObservation<T = unknown> = {
+  id: string; kind: string; state: SemanticState; value: T | null;
+  evidenceIds: string[]; frameIds: string[]; shotIds: string[];
+  interval: { startSec: number; endSec: number } | null;
+  extractor: {
+    id: string; version: string; modelId: string | null; modelRevision: string | null;
+    runtime: string; runtimeRevision: string | null; executionProvider: LocalExecutionProvider; quantization: string | null;
+  };
+  provenance: SemanticProvenance; confidence: SemanticConfidence; uncertaintyReasons: string[];
+};
+export type FactualSemanticInventory = {
+  id: string; version: string; fingerprint: string; durationSeconds: number;
+  observationIds: string[];
+  representativeFrames: Array<{ frameId: string; timeSec: number; selectionReasons: string[]; sourceEvidenceIds: string[] }>;
+  shots: Array<{ shotId: string; startSec: number; endSec: number; representativeFrameIds: string[]; observationIds: string[] }>;
+  openingObservationIds: string[]; dominantSubjectObservationIds: string[]; majorActionObservationIds: string[];
+  progressionObservationIds: string[]; repeatedCompositionObservationIds: string[]; semanticRedundancyObservationIds: string[];
+  strongestCandidateObservationIds: string[]; weakestCandidateObservationIds: string[];
+  expectationObservationIds: string[]; payoffObservationIds: string[]; textObservationIds: string[];
+  speechObservationIds: string[]; audioRoleObservationIds: string[]; endingObservationIds: string[];
+  loopRewatchObservationIds: string[]; shareabilityObservationIds: string[]; accessibilityObservationIds: string[];
+  confidence: SemanticConfidence; limitations: string[]; unknownObservationIds: string[];
+};
+export type SemanticVideoInventory = {
+  version: string; inventoryId: string; fingerprint: string; durationSeconds: number;
+  factualInventoryId: string;
+  selectedTargetNiche: TargetNiche; factual: FactualSemanticInventory;
+  capabilityTier: CapabilityTier; capabilityQualification: SemanticRuntimeQualification;
+  extractors: SemanticExtractorManifest[]; models: SemanticModelManifest[];
+  observations: SemanticObservation[]; contextualObservationIds: string[];
+  limitations: string[]; partial: boolean;
+};
+export type RuleApplicability = 'applicable' | 'not_applicable' | 'unknown';
+export type RuleOutcome = 'supports_principle' | 'concern_observed' | 'mixed' | 'not_applicable' | 'unknown';
+export type RuleAssessment = {
+  id: string; version: string; ruleId: string; requiredEvidence: string[];
+  requirementBindings: Array<{ requirement: string; state: 'satisfied' | 'missing' | 'conflicting'; evidenceIds: string[]; semanticObservationIds: string[] }>;
+  evidenceIds: string[]; semanticObservationIds: string[];
+  interval: { startSec: number; endSec: number };
+  applicability: RuleApplicability; outcome: RuleOutcome; confidence: SemanticConfidence;
+  reason: string; sourceReferences: Array<{ document: string; pages: number[] }>;
+  missingEvidence: string[]; conflictingEvidence: string[]; provenance: SemanticProvenance[];
+};
 export type CapabilityReport = {
   id: string; version: string; state: EvidenceState; mode: 'required' | 'optional' | 'experimental';
   provenance: MeasurementProvenance; limitations: string[];

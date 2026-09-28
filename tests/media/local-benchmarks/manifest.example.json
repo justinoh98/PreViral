@@ -1,0 +1,23 @@
+{
+  "version": "semantic-benchmark-manifest-v1",
+  "fixtures": {
+    "locally-supplied-reel": {
+      "source": {
+        "kind": "local_file",
+        "locator": "tests/media/local-benchmarks/replace-with-authorized-file.mp4"
+      },
+      "frameCount": 1,
+      "referenceIds": {
+        "evidenceIds": [],
+        "frameIds": [],
+        "shotIds": []
+      },
+      "expectedObservations": [
+        { "kind": "dominant_subject", "state": "unknown", "value": null, "tasks": ["subject_object_precision", "unknown_calibration"] }
+      ],
+      "language": "not_applicable",
+      "scenario": "standard",
+      "tags": ["subject_object_precision", "unknown_calibration", "evidence_reference_validity"]
+    }
+  }
+}

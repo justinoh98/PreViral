@@ -56,6 +56,10 @@ test('cache and stable evaluation identity include content, context, and all ver
     analyzer: ANALYZER_VERSION,
     sourceRules: RULE_REGISTRY_VERSION,
     rubric: 'previral-creative-v1',
+    semantic: {
+      schema: 'semantic-observations-v1', inventory: 'semantic-inventory-v1', extractors: 'semantic-extractors-v1',
+      applicability: 'rule-applicability-v1', calibration: 'semantic-calibration-v1',
+    },
   });
 });
 

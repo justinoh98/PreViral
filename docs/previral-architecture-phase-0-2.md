@@ -1,6 +1,6 @@
 # PreViral source-reconciled architecture: Phases 0–2
 
-Status: architecture approved; Phase 0–2 foundation implemented on `hermes/experimental`. Phase 3 semantic interpretation and rule activation are intentionally out of scope and remain unapproved.
+Status: Phase 0–2 architecture and implementation are approved on `hermes/experimental`. The Phase 3 architecture is approved, with implementation authorization currently limited to Phase 3.0 contract freeze, Phase 3.1 capability/worker foundation, and Phase 3.2 evidence planning/benchmark infrastructure. Semantic model integration and Phase 3.3 onward remain unapproved.
 
 ## Authority and evidence hierarchy
 
@@ -129,4 +129,4 @@ This is an opt-in diagnostic surface, not final product presentation.
 
 ## Deferred work
 
-Phase 3 and later must not begin without approval. Deferred work includes semantic models, final applicability activation, scoring reconciliation, fifth-aspect trait changes, prediction-range changes, normal-public provider replacement, feedback restructuring, OCR execution, and Growth Playbook reconciliation.
+Phase 3.3 and later must not begin without further approval. Deferred work includes semantic model integration, temporal semantic interpretation, OCR/ASR execution, final semantic inventory generation, final applicability activation, scoring reconciliation, fifth-aspect trait changes, prediction-range changes, normal-public provider replacement, feedback restructuring, final semantic hardening, and Growth Playbook reconciliation.

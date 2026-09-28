@@ -1,0 +1,97 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://previral.local/schemas/semantic-benchmark-manifest-v1.json",
+  "title": "PreViral local semantic benchmark manifest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version", "fixtures"],
+  "properties": {
+    "version": { "const": "semantic-benchmark-manifest-v1" },
+    "fixtures": {
+      "type": "object",
+      "minProperties": 1,
+      "propertyNames": { "pattern": "^[a-z0-9][a-z0-9-]*$" },
+      "additionalProperties": { "$ref": "#/$defs/fixture" }
+    }
+  },
+  "$defs": {
+    "fixture": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["source", "frameCount", "referenceIds", "expectedObservations", "language", "scenario", "tags"],
+      "properties": {
+        "source": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "locator"],
+          "properties": {
+            "kind": { "enum": ["synthetic", "local_file"] },
+            "locator": { "type": "string" }
+          },
+          "oneOf": [
+            {
+              "properties": {
+                "kind": { "const": "synthetic" },
+                "locator": { "pattern": "^generated:[^\\s]+$" }
+              }
+            },
+            {
+              "properties": {
+                "kind": { "const": "local_file" },
+                "locator": { "pattern": "^tests/media/local-benchmarks/(?!.*\\.\\.)[A-Za-z0-9._/-]+$" }
+              }
+            }
+          ]
+        },
+        "frameCount": { "type": "integer", "minimum": 1 },
+        "referenceIds": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["evidenceIds", "frameIds", "shotIds"],
+          "properties": {
+            "evidenceIds": { "type": "array", "items": { "type": "string", "minLength": 1 }, "uniqueItems": true },
+            "frameIds": { "type": "array", "items": { "type": "string", "minLength": 1 }, "uniqueItems": true },
+            "shotIds": { "type": "array", "items": { "type": "string", "minLength": 1 }, "uniqueItems": true }
+          }
+        },
+        "expectedObservations": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["kind", "state", "value", "tasks"],
+            "properties": {
+              "kind": { "type": "string", "minLength": 1 },
+              "state": { "enum": ["observed", "not_observed", "unknown", "not_applicable"] },
+              "value": { "type": ["string", "null"] },
+              "tasks": {
+                "type": "array",
+                "minItems": 1,
+                "uniqueItems": true,
+                "items": { "enum": ["subject_object_precision", "action_state_accuracy", "meaningful_progression", "repetition_classification", "opening_interpretation", "payoff_ending_relationship", "ocr_accuracy", "asr_accuracy", "unknown_calibration", "evidence_reference_validity"] }
+              }
+            },
+            "allOf": [
+              {
+                "if": { "properties": { "state": { "const": "observed" } } },
+                "then": { "properties": { "value": { "type": "string", "minLength": 1 } } },
+                "else": { "properties": { "value": { "type": "null" } } }
+              }
+            ]
+          }
+        },
+        "language": { "enum": ["en", "ko", "not_applicable"] },
+        "scenario": { "enum": ["standard", "creative_exception"] },
+        "tags": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "enum": ["subject_object_precision", "action_state_accuracy", "meaningful_progression", "repetition_classification", "opening_interpretation", "payoff_ending_relationship", "ocr_accuracy", "asr_accuracy", "unknown_calibration", "evidence_reference_validity"]
+          }
+        }
+      }
+    }
+  }
+}
