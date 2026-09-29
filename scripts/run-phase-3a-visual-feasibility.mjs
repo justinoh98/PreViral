@@ -6,10 +6,14 @@ import { createServer } from 'vite';
 
 const provider = process.argv.find(value => value.startsWith('--provider='))?.split('=')[1] ?? 'webgpu';
 const dtype = process.argv.find(value => value.startsWith('--dtype='))?.split('=')[1] ?? 'q4f16';
+const model = process.argv.find(value => value.startsWith('--model='))?.split('=')[1] ?? 'smolvlm2';
 const runTimeoutMs = Number(process.argv.find(value => value.startsWith('--timeout-ms='))?.split('=')[1] ?? 300_000);
-const outputPath = process.argv.find(value => value.startsWith('--output='))?.slice('--output='.length) ?? `/tmp/previral-phase-3a-${provider}-${dtype}.json`;
+const phase = model === 'florence2' ? 'phase-3b' : 'phase-3a';
+const outputPath = process.argv.find(value => value.startsWith('--output='))?.slice('--output='.length) ?? `/tmp/previral-${phase}-${model}-${provider}-${dtype}.json`;
 if (!['webgpu', 'wasm'].includes(provider)) throw new Error('Provider must be webgpu or wasm.');
 if (!['q4f16', 'q4'].includes(dtype)) throw new Error('Dtype must be q4f16 or q4.');
+if (!['smolvlm2', 'florence2'].includes(model)) throw new Error('Model must be smolvlm2 or florence2.');
+if (model === 'florence2' && dtype !== 'q4') throw new Error('Florence-2 Phase 3.3B is pinned to the q4 artifact.');
 if (!Number.isFinite(runTimeoutMs) || runTimeoutMs < 1_000) throw new Error('Timeout must be at least 1000ms.');
 
 const readChildren = async pid => {
@@ -93,7 +97,7 @@ const sampler = setInterval(() => { void residentBytes(rootPid).then(value => { 
 const startedAt = performance.now();
 let run = null; let runError = null; let timedOut = false;
 try {
-  const running = page.evaluate(({ provider, dtype }) => window.phase3a.start(provider, dtype), { provider, dtype });
+  const running = page.evaluate(({ provider, dtype, model }) => window.phase3a.start(provider, dtype, model), { provider, dtype, model });
   let timeout;
   const bounded = new Promise((_, reject) => {
     timeout = setTimeout(() => {
@@ -111,12 +115,12 @@ const wallMs = performance.now() - startedAt;
 
 let cancellation;
 try {
-  cancellation = await page.evaluate(async ({ provider, dtype }) => {
-    const pending = window.phase3a.start(provider, dtype).then(() => ({ settled: 'completed' }), error => ({ settled: 'rejected', name: error?.name, message: error?.message }));
+  cancellation = await page.evaluate(async ({ provider, dtype, model }) => {
+    const pending = window.phase3a.start(provider, dtype, model).then(() => ({ settled: 'completed' }), error => ({ settled: 'rejected', name: error?.name, message: error?.message }));
     await new Promise(resolve => setTimeout(resolve, 100));
     const cancelled = window.phase3a.cancel();
     return { cancelled, outcome: await pending, pageResponsive: 1 + 1 === 2 };
-  }, { provider, dtype });
+  }, { provider, dtype, model });
 } catch (error) {
   cancellation = { cancelled: false, error: error instanceof Error ? `${error.name}: ${error.message}` : String(error) };
 }
@@ -127,6 +131,7 @@ const report = {
   generatedAt: new Date().toISOString(),
   provider,
   dtype,
+  model,
   runTimeoutMs,
   environment: {
     node: process.version,
@@ -144,7 +149,7 @@ const report = {
   runError,
 };
 await fs.writeFile(path.resolve(outputPath), `${JSON.stringify(report, null, 2)}\n`, 'utf8');
-console.log(JSON.stringify({ outputPath: path.resolve(outputPath), provider, dtype, wallMs, runError, webgpu, memory: report.memory, cancellation }, null, 2));
+console.log(JSON.stringify({ outputPath: path.resolve(outputPath), model, provider, dtype, wallMs, runError, webgpu, memory: report.memory, cancellation }, null, 2));
 
 if (timedOut) await browserServer.kill();
 else {

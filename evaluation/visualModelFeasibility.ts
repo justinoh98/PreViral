@@ -7,6 +7,7 @@ export type VisualModelArtifact = {
   revision: string;
   upstreamLicense: string;
   browserArtifactLicense: BrowserArtifactLicenseState;
+  browserArtifactLicenseName?: string;
   weightBytes: number;
   approximateTotalBytes: number;
   compositeChecksum: string;
@@ -60,6 +61,24 @@ export const CLIP_VIT_B32_ARTIFACT: VisualModelArtifact = Object.freeze({
   blocker: 'The converted artifact license is not published in the candidate repository.',
 });
 
+export const FLORENCE2_BASE_FT_Q4_ARTIFACT: VisualModelArtifact = Object.freeze({
+  id: 'onnx-community/Florence-2-base-ft',
+  revision: 'e88a44eaf3791a35eae0c5a47b3dbcd36e67eb6f',
+  upstreamLicense: 'MIT',
+  browserArtifactLicense: 'verified',
+  browserArtifactLicenseName: 'MIT',
+  weightBytes: 333_249_173,
+  approximateTotalBytes: 337_478_428,
+  compositeChecksum: 'sha256-8b356dce7784cee2d7d9bfe54b692ef50cc149dfd315942924150f77061f0564',
+  components: [
+    { path: 'onnx/decoder_model_merged_q4.onnx', bytes: 64_393_474, sha256: 'be7a2f33e65f8d65538024772fda4d1c5a7752d60a7159aadf53f9f4798b90fa' },
+    { path: 'onnx/embed_tokens_q4.onnx', bytes: 157_560_063, sha256: 'f972f338dedea6b67e10e87aacc0dfd4e247f1e18c60d3911af9e6b9edb68f32' },
+    { path: 'onnx/encoder_model_q4.onnx', bytes: 30_058_778, sha256: '34b17bcf191dacb79bd482b94bad5cf1ba39bc770f6a4c9ae26f28b89c235e4b' },
+    { path: 'onnx/vision_encoder_q4.onnx', bytes: 81_236_858, sha256: '8f211dfc176996d14e24d551f8e02530de781dd8b30d9e7d35b69b7c2d0340ce' },
+  ],
+  tokenizerAndConfigFiles: ['added_tokens.json', 'config.json', 'generation_config.json', 'merges.txt', 'preprocessor_config.json', 'special_tokens_map.json', 'tokenizer.json', 'tokenizer_config.json', 'vocab.json'],
+});
+
 export type VisualFeasibilityRuntime = {
   load: (mode: 'cold' | 'warm', signal: AbortSignal) => Promise<{ downloadedBytes: number }>;
   infer: (fixture: BenchmarkFixture, signal: AbortSignal) => Promise<{ text: string; frameCount: number }>;
@@ -80,6 +99,8 @@ type VisualFeasibilityAdapterOptions = {
   requestedTier: CapabilityTier;
   maxFrames: number;
   runtime: VisualFeasibilityRuntime;
+  benchmarkId?: string;
+  benchmarkVersion?: string;
 };
 
 const modelManifest = (artifact: VisualModelArtifact, executionProvider: Exclude<LocalExecutionProvider, 'none'>): BenchmarkModelArtifact => ({
@@ -97,8 +118,8 @@ export function createVisualFeasibilityBenchmarkAdapter(options: VisualFeasibili
   let controller = new AbortController();
   const diagnostics: VisualFeasibilityBenchmarkAdapter['diagnostics'] = { loads: [], outputs: [] };
   return {
-    id: `${options.artifact.id}-phase-3a-feasibility`,
-    version: 'phase-3.3a-v1',
+    id: options.benchmarkId ?? `${options.artifact.id}-phase-3a-feasibility`,
+    version: options.benchmarkVersion ?? 'phase-3.3a-v1',
     executionProvider: options.executionProvider,
     runtime: { id: '@huggingface/transformers', version: '4.3.0' },
     models: [modelManifest(options.artifact, options.executionProvider)],

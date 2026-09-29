@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { runSemanticBenchmark, type BenchmarkFixture } from '../../evaluation/semanticBenchmark';
 import {
   CLIP_VIT_B32_ARTIFACT,
+  FLORENCE2_BASE_FT_Q4_ARTIFACT,
   SMOLVLM2_Q4_ARTIFACT,
   SMOLVLM2_Q4F16_ARTIFACT,
   createVisualFeasibilityBenchmarkAdapter,
@@ -20,7 +21,7 @@ const fixture: BenchmarkFixture = {
   tags: ['unknown_calibration'],
 };
 
-test('pinned Phase 3.3A artifacts record exact browser files, sizes, and license gates', () => {
+test('pinned visual model artifacts record exact browser files, sizes, and license gates', () => {
   assert.equal(SMOLVLM2_Q4F16_ARTIFACT.revision, '067788b187b95ebe7b2e040b3e4299e342e5b8fd');
   assert.equal(SMOLVLM2_Q4F16_ARTIFACT.weightBytes, 189_174_979);
   assert.equal(SMOLVLM2_Q4F16_ARTIFACT.browserArtifactLicense, 'verified');
@@ -31,6 +32,24 @@ test('pinned Phase 3.3A artifacts record exact browser files, sizes, and license
   assert.equal(CLIP_VIT_B32_ARTIFACT.revision, 'd15189d7028b43f1d3e65039190477f6af591c2a');
   assert.equal(CLIP_VIT_B32_ARTIFACT.browserArtifactLicense, 'unverified');
   assert.match(CLIP_VIT_B32_ARTIFACT.blocker ?? '', /converted artifact license/i);
+  assert.equal(FLORENCE2_BASE_FT_Q4_ARTIFACT.revision, 'e88a44eaf3791a35eae0c5a47b3dbcd36e67eb6f');
+  assert.equal(FLORENCE2_BASE_FT_Q4_ARTIFACT.upstreamLicense, 'MIT');
+  assert.equal(FLORENCE2_BASE_FT_Q4_ARTIFACT.browserArtifactLicenseName, 'MIT');
+  assert.equal(FLORENCE2_BASE_FT_Q4_ARTIFACT.weightBytes, 333_249_173);
+  assert.equal(FLORENCE2_BASE_FT_Q4_ARTIFACT.approximateTotalBytes, 337_478_428);
+  assert.equal(FLORENCE2_BASE_FT_Q4_ARTIFACT.components.length, 4);
+  assert.ok(FLORENCE2_BASE_FT_Q4_ARTIFACT.components.every(component => /^[a-f0-9]{64}$/.test(component.sha256)));
+  const florenceAdapter = createVisualFeasibilityBenchmarkAdapter({
+    artifact: FLORENCE2_BASE_FT_Q4_ARTIFACT,
+    executionProvider: 'wasm',
+    requestedTier: 'high',
+    maxFrames: 1,
+    benchmarkId: 'onnx-community/Florence-2-base-ft-phase-3b-feasibility',
+    benchmarkVersion: 'phase-3.3b-v1',
+    runtime: { load: async () => ({ downloadedBytes: 0 }), infer: async input => ({ text: '{}', frameCount: input.frameCount }), cleanup: async () => {} },
+  });
+  assert.equal(florenceAdapter.id, 'onnx-community/Florence-2-base-ft-phase-3b-feasibility');
+  assert.equal(florenceAdapter.version, 'phase-3.3b-v1');
 });
 
 test('visual feasibility adapter reuses the benchmark harness and bounds multi-frame work', async () => {

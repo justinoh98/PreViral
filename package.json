@@ -11,6 +11,7 @@
     "clean": "rm -rf dist server.js",
     "lint": "tsc --noEmit",
     "phase3a:visual": "node scripts/run-phase-3a-visual-feasibility.mjs",
+    "phase3b:florence": "node scripts/run-phase-3a-visual-feasibility.mjs --model=florence2 --dtype=q4",
     "test": "node --import tsx --test tests/evaluation/*.test.ts"
   },
   "dependencies": {

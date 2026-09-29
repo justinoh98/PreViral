@@ -1,12 +1,13 @@
 type Provider = 'webgpu' | 'wasm';
 type Dtype = 'q4f16' | 'q4';
+type Model = 'smolvlm2' | 'florence2';
 type WorkerResponse = { type: 'result'; result: unknown } | { type: 'error'; error: string } | { type: 'progress'; detail: unknown };
 
 type PendingRun = { worker: Worker; reject: (error: Error) => void };
 let pending: PendingRun | null = null;
 
-const start = (provider: Provider, dtype: Dtype = 'q4f16'): Promise<unknown> => {
-  if (pending) throw new Error('A Phase 3.3A worker is already running.');
+const start = (provider: Provider, dtype: Dtype = 'q4f16', model: Model = 'smolvlm2'): Promise<unknown> => {
+  if (pending) throw new Error('A visual feasibility worker is already running.');
   return new Promise((resolve, reject) => {
     const worker = new Worker(new URL('./smolVlmWorker.ts', import.meta.url), { type: 'module' });
     pending = { worker, reject };
@@ -23,9 +24,9 @@ const start = (provider: Provider, dtype: Dtype = 'q4f16'): Promise<unknown> => 
     worker.onerror = event => {
       pending = null;
       worker.terminate();
-      reject(new Error(event.message || 'Phase 3.3A worker failed.'));
+      reject(new Error(event.message || 'Visual feasibility worker failed.'));
     };
-    worker.postMessage({ type: 'run', provider, dtype });
+    worker.postMessage({ type: 'run', provider, dtype, model });
   });
 };
 
@@ -42,7 +43,7 @@ window.phase3a = { start, cancel };
 
 declare global {
   interface Window {
-    phase3a: { start: (provider: Provider, dtype?: Dtype) => Promise<unknown>; cancel: () => boolean };
+    phase3a: { start: (provider: Provider, dtype?: Dtype, model?: Model) => Promise<unknown>; cancel: () => boolean };
   }
 }
 
