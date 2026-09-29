@@ -2,17 +2,21 @@
 
 import { AutoProcessor, AutoTokenizer, Florence2ForConditionalGeneration, type Florence2Processor, RawImage, SmolVLMForConditionalGeneration, Tensor, env } from '@huggingface/transformers';
 import { runSemanticBenchmark, type BenchmarkFixture } from '../../evaluation/semanticBenchmark';
-import { createVisualFeasibilityBenchmarkAdapter, FLORENCE2_BASE_FT_Q4_ARTIFACT, SMOLVLM2_Q4_ARTIFACT, SMOLVLM2_Q4F16_ARTIFACT, type VisualFeasibilityRuntime } from '../../evaluation/visualModelFeasibility';
+import { createVisualFeasibilityBenchmarkAdapter, FLORENCE2_BASE_FT_Q4_ARTIFACT, SMOLVLM2_Q4_ARTIFACT, SMOLVLM2_Q4F16_ARTIFACT, type VisualFeasibilityBenchmarkAdapter, type VisualFeasibilityRuntime } from '../../evaluation/visualModelFeasibility';
 
 type Provider = 'webgpu' | 'wasm';
 type Dtype = 'q4f16' | 'q4';
 type Model = 'smolvlm2' | 'florence2';
 type Progress = { status?: string; file?: string; loaded?: number; total?: number; progress?: number };
+type RuntimeGpuAdapter = { info?: Record<string, unknown>; isFallbackAdapter?: boolean };
 
 const workerScope = self as unknown as DedicatedWorkerGlobalScope;
 env.allowLocalModels = false;
 env.useBrowserCache = true;
 env.backends.onnx.wasm.numThreads = 1;
+const webgpuBackend = env.backends.onnx.webgpu as unknown as { powerPreference?: 'low-power' | 'high-performance'; forceFallbackAdapter?: boolean; adapter?: RuntimeGpuAdapter };
+webgpuBackend.powerPreference = 'high-performance';
+webgpuBackend.forceFallbackAdapter = false;
 
 const fixture = (suffix: string): BenchmarkFixture => ({
   id: `two-frame-visual-probe-${suffix}`,
@@ -38,7 +42,21 @@ const frames = () => {
 
 const postProgress = (detail: unknown) => workerScope.postMessage({ type: 'progress', detail });
 
-async function executeSmolVlm(provider: Provider, dtype: Dtype) {
+const runtimeAdapterDetails = () => {
+  const adapter = webgpuBackend.adapter;
+  const info = adapter?.info;
+  return {
+    info: {
+      vendor: info?.vendor ?? '',
+      architecture: info?.architecture ?? '',
+      device: info?.device ?? '',
+      description: info?.description ?? '',
+    },
+    isFallbackAdapter: adapter?.isFallbackAdapter,
+  };
+};
+
+function createSmolVlmSession(provider: Provider, dtype: Dtype) {
   const artifact = dtype === 'q4' ? SMOLVLM2_Q4_ARTIFACT : SMOLVLM2_Q4F16_ARTIFACT;
   let model: SmolVLMForConditionalGeneration | null = null;
   let processor: Awaited<ReturnType<typeof AutoProcessor.from_pretrained>> | null = null;
@@ -79,6 +97,11 @@ async function executeSmolVlm(provider: Provider, dtype: Dtype) {
       postProgress({ provider, stage: 'cleanup', complete: true });
     },
   };
+  return { artifact, runtime };
+}
+
+async function executeSmolVlm(provider: Provider, dtype: Dtype) {
+  const { artifact, runtime } = createSmolVlmSession(provider, dtype);
   const adapter = createVisualFeasibilityBenchmarkAdapter({ artifact, executionProvider: provider, requestedTier: 'high', maxFrames: 2, runtime });
   const result = await runSemanticBenchmark(adapter, [fixture('first'), fixture('repeat')], {
     environment: { platform: navigator.platform || 'browser', browser: navigator.userAgent, deviceClass: 'desktop' },
@@ -89,6 +112,80 @@ async function executeSmolVlm(provider: Provider, dtype: Dtype) {
     memorySampleIntervalMs: 25,
   });
   return { provider, dtype, artifact, benchmark: result, diagnostics: adapter.diagnostics };
+}
+
+type ManualSession = { adapter: VisualFeasibilityBenchmarkAdapter; dtype: Dtype; inferenceCount: number };
+let manualSession: ManualSession | null = null;
+let manualBusy = false;
+
+const memoryBytes = () => {
+  const memory = performance as Performance & { memory?: { usedJSHeapSize?: number } };
+  return Number.isFinite(memory.memory?.usedJSHeapSize) ? memory.memory!.usedJSHeapSize! : null;
+};
+
+async function measureManualOperation<T>(operation: () => Promise<T>) {
+  const startedAt = performance.now();
+  const beforeBytes = memoryBytes();
+  let peakBytes = beforeBytes;
+  const sampler = setInterval(() => {
+    const value = memoryBytes();
+    if (value !== null) peakBytes = peakBytes === null ? value : Math.max(peakBytes, value);
+  }, 50);
+  try {
+    const value = await operation();
+    const afterBytes = memoryBytes();
+    if (afterBytes !== null) peakBytes = peakBytes === null ? afterBytes : Math.max(peakBytes, afterBytes);
+    return {
+      value,
+      latencyMs: Number((performance.now() - startedAt).toFixed(3)),
+      memory: {
+        beforeBytes,
+        peakBytes,
+        afterBytes,
+        peakDeltaBytes: beforeBytes === null || peakBytes === null ? null : Math.max(0, peakBytes - beforeBytes),
+      },
+    };
+  } finally {
+    clearInterval(sampler);
+  }
+}
+
+async function manualLoad(dtype: Dtype) {
+  if (manualSession) await manualSession.adapter.cleanup();
+  const { artifact, runtime } = createSmolVlmSession('webgpu', dtype);
+  const adapter = createVisualFeasibilityBenchmarkAdapter({
+    artifact,
+    executionProvider: 'webgpu',
+    requestedTier: 'high',
+    maxFrames: 2,
+    runtime,
+    benchmarkId: `${artifact.id}-phase-3c-real-device`,
+    benchmarkVersion: 'phase-3.3c-v1',
+  });
+  const measured = await measureManualOperation(() => adapter.load('cold'));
+  manualSession = { adapter, dtype, inferenceCount: 0 };
+  return {
+    dtype,
+    artifact: { id: artifact.id, revision: artifact.revision, approximateTotalBytes: artifact.approximateTotalBytes },
+    loadMs: measured.latencyMs,
+    memory: measured.memory,
+    runtimeAdapter: runtimeAdapterDetails(),
+  };
+}
+
+async function manualInfer() {
+  if (!manualSession) throw new Error('Load SmolVLM2 before running inference.');
+  const measured = await measureManualOperation(() => manualSession!.adapter.infer(fixture(`manual-${manualSession!.inferenceCount + 1}`)));
+  manualSession.inferenceCount += 1;
+  const output = manualSession.adapter.diagnostics.outputs.at(-1)?.text ?? '';
+  return { run: manualSession.inferenceCount, dtype: manualSession.dtype, inferenceMs: measured.latencyMs, output, memory: measured.memory };
+}
+
+async function manualDispose() {
+  if (!manualSession) return { disposed: false };
+  await manualSession.adapter.cleanup();
+  manualSession = null;
+  return { disposed: true };
 }
 
 const florenceFixtures: BenchmarkFixture[] = [
@@ -194,10 +291,26 @@ async function executeFlorence(provider: Provider, dtype: Dtype) {
 }
 
 workerScope.onmessage = event => {
-  if (event.data?.type !== 'run' || !['webgpu', 'wasm'].includes(event.data.provider) || !['q4f16', 'q4'].includes(event.data.dtype) || !['smolvlm2', 'florence2'].includes(event.data.model)) return;
-  const execute = event.data.model === 'florence2' ? executeFlorence : executeSmolVlm;
-  void execute(event.data.provider as Provider, event.data.dtype as Dtype).then(
-    result => workerScope.postMessage({ type: 'result', result }),
-    error => workerScope.postMessage({ type: 'error', error: error instanceof Error ? `${error.name}: ${error.message}` : String(error) }),
-  );
+  if (event.data?.type === 'run' && ['webgpu', 'wasm'].includes(event.data.provider) && ['q4f16', 'q4'].includes(event.data.dtype) && ['smolvlm2', 'florence2'].includes(event.data.model)) {
+    const execute = event.data.model === 'florence2' ? executeFlorence : executeSmolVlm;
+    void execute(event.data.provider as Provider, event.data.dtype as Dtype).then(
+      result => workerScope.postMessage({ type: 'result', result }),
+      error => workerScope.postMessage({ type: 'error', error: error instanceof Error ? `${error.name}: ${error.message}` : String(error) }),
+    );
+    return;
+  }
+  if (!['manual-load', 'manual-infer', 'manual-dispose'].includes(event.data?.type) || typeof event.data.requestId !== 'number') return;
+  if (manualBusy) {
+    workerScope.postMessage({ type: 'manual-error', requestId: event.data.requestId, error: 'Another real-device operation is already running.' });
+    return;
+  }
+  if (event.data.type === 'manual-load' && !['q4f16', 'q4'].includes(event.data.dtype)) return;
+  manualBusy = true;
+  const operation = event.data.type === 'manual-load'
+    ? manualLoad(event.data.dtype as Dtype)
+    : event.data.type === 'manual-infer' ? manualInfer() : manualDispose();
+  void operation.then(
+    result => workerScope.postMessage({ type: 'manual-result', requestId: event.data.requestId, result }),
+    error => workerScope.postMessage({ type: 'manual-error', requestId: event.data.requestId, error: error instanceof Error ? `${error.name}: ${error.message}` : String(error) }),
+  ).finally(() => { manualBusy = false; });
 };

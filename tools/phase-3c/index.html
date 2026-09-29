@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>PreViral Phase 3.3C real-device test</title>
+    <style>
+      body { margin: 0; background: #f5f7fa; color: #172033; font: 14px/1.45 system-ui, sans-serif; }
+      main { max-width: 900px; margin: 24px auto; padding: 0 16px 40px; }
+      section { background: white; border: 1px solid #d8dee9; border-radius: 8px; margin: 12px 0; padding: 16px; }
+      h1 { font-size: 22px; margin-bottom: 4px; } h2 { font-size: 16px; margin-top: 0; }
+      .status { border-radius: 6px; font-size: 17px; font-weight: 800; padding: 12px; }
+      .eligible { background: #dcfce7; color: #166534; } .invalid { background: #fee2e2; color: #991b1b; }
+      .frames { display: flex; gap: 12px; } .frame { align-items: center; color: white; display: flex; font-weight: 700; height: 112px; justify-content: center; width: 112px; }
+      .red { background: rgb(210, 35, 35); } .blue { background: rgb(35, 75, 220); }
+      button { background: #253b80; border: 0; border-radius: 5px; color: white; cursor: pointer; font-weight: 700; margin: 4px 8px 4px 0; padding: 10px 14px; }
+      button:disabled { background: #9aa4b5; cursor: not-allowed; } button.cancel { background: #a11b2b; }
+      dl { display: grid; grid-template-columns: 190px 1fr; gap: 7px 12px; } dt { font-weight: 800; } dd { margin: 0; overflow-wrap: anywhere; }
+      pre { background: #111827; color: #e5e7eb; max-height: 260px; overflow: auto; padding: 12px; white-space: pre-wrap; }
+      .note { color: #4b5563; } code { font-size: 12px; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>Phase 3.3C — SmolVLM2 real-device WebGPU gate</h1>
+      <p class="note">Development diagnostic only. Synthetic frames stay in this browser. Only pinned model assets download from Hugging Face; frames are never uploaded.</p>
+
+      <section>
+        <h2>Hardware eligibility</h2>
+        <div id="eligibility" class="status invalid">CHECKING WEBGPU…</div>
+        <dl>
+          <dt>WebGPU available</dt><dd id="webgpu">checking</dd>
+          <dt>Adapter information</dt><dd><code id="adapter">checking</code></dd>
+          <dt>Browser / user agent</dt><dd id="browser">checking</dd>
+          <dt>Selected quantization</dt><dd id="dtype">pending</dd>
+          <dt>WebGPU features</dt><dd><code id="features">checking</code></dd>
+          <dt>Device limits</dt><dd><code id="limits">checking</code></dd>
+        </dl>
+      </section>
+
+      <section>
+        <h2>Local two-frame input</h2>
+        <div class="frames"><div class="frame red">FRAME 1 — RED</div><div class="frame blue">FRAME 2 — BLUE</div></div>
+        <p class="note">Prompt: Describe the visible change between these two frames in one short sentence.</p>
+      </section>
+
+      <section>
+        <h2>Actions</h2>
+        <button id="load" disabled>1. LOAD PINNED MODEL</button>
+        <button id="infer" disabled>2. RUN FIRST INFERENCE</button>
+        <button id="cancel" class="cancel" disabled>CANCEL</button>
+        <button id="copy">COPY RESULT REPORT</button>
+        <p id="progress" class="note">Waiting for capability check.</p>
+      </section>
+
+      <section id="report">
+        <h2>Result report</h2>
+        <dl>
+          <dt>MODEL LOAD:</dt><dd id="model-load">—</dd>
+          <dt>FIRST INFERENCE:</dt><dd id="first-inference">—</dd>
+          <dt>SECOND/WARM INFERENCE:</dt><dd id="second-inference">—</dd>
+          <dt>TOTAL:</dt><dd id="total">—</dd>
+          <dt>APPROX MEMORY IF AVAILABLE:</dt><dd id="memory">—</dd>
+          <dt>WEBGPU FEATURES:</dt><dd id="report-features">—</dd>
+          <dt>OUTPUT:</dt><dd><pre id="output">—</pre></dd>
+          <dt>ERROR:</dt><dd id="error">—</dd>
+          <dt>RESULT:</dt><dd id="result"><strong>PENDING</strong></dd>
+        </dl>
+      </section>
+
+      <section>
+        <h2>Decision bounds</h2>
+        <p class="note">Two useful red-to-blue outputs are required. A run is NOT VIABLE if load exceeds 180 s, first inference exceeds 60 s, warm inference exceeds 30 s, detected memory delta exceeds 2 GiB, or main-thread gaps exceed 2 s. Slower intermediate values, unknown memory/responsiveness, memory over 1 GiB, or main-thread gaps over 500 ms produce VIABLE WITH HIGH-TIER LIMITATIONS.</p>
+      </section>
+    </main>
+    <script type="module" src="/tools/phase-3c/main.ts"></script>
+  </body>
+</html>
